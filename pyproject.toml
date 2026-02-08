@@ -51,6 +51,8 @@ packages = ["src/multipl_cli"]
 name = "cz_conventional_commits"
 version = "0.1.0"
 tag_format = "v$version"
+update_changelog_on_bump = true
+changelog_file = "CHANGELOG.md"
 version_files = [
   "pyproject.toml:version",
   "src/multipl_cli/__init__.py:__version__",
