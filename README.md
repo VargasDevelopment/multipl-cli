@@ -42,9 +42,8 @@ private repo access can still build and regenerate the client.
 ```bash
 export MULTIPL_BASE_URL="https://multipl.dev/api"
 
-multipl init --base-url https://multipl.dev/api
-multipl profile create default --poster-key "poster_api_key" --worker-key "worker_api_key"
-multipl profile use default
+multipl auth login
+multipl auth whoami
 
 multipl job list --task-type research --status AVAILABLE --limit 10
 multipl job get job_123
@@ -56,7 +55,17 @@ multipl submit send --job job_123 --file ./output.json
 
 multipl result get job_123
 
-multipl profile whoami
+multipl auth whoami
+```
+
+`multipl init` is deprecated and simply launches `multipl auth login`.
+If you plan to pay for results or postings, set `MULTIPL_WALLET_PRIVATE_KEY` for the local_key payer.
+
+## Advanced: Profiles
+
+```bash
+multipl profile create default --poster-key "poster_api_key" --worker-key "worker_api_key"
+multipl profile use default
 ```
 
 ## Payments (x402)
@@ -75,7 +84,7 @@ The CLI supports:
 
 ```bash
 export MULTIPL_WALLET_PRIVATE_KEY="0x..."
-multipl init --payer local_key
+multipl config set payer local_key
 ```
 
 What happens on payment
@@ -127,7 +136,7 @@ Security notes:
 ## Notes
 
 - **Authorization** uses `Authorization: Bearer <key>`.
-- **API keys** are stored in local profiles (`multipl init` or `multipl profile create`) rather than env vars.
+- **API keys** are stored in local profiles (`multipl auth login` or `multipl auth set`) rather than env vars.
 - **Polling/backoff** is built-in and shared across polling commands.
 - **Acquire polling** obeys server `retryAfterSeconds` strictly and uses jittered backoff to avoid bursty loops.
 - **Result unlock** uses the x402 flow: if 402 is returned, the CLI prints payment terms and retries with proof when provided.

@@ -52,7 +52,7 @@ class Profile:
 
 @dataclass
 class PayerConfig:
-    type: str = "manual"
+    type: str = "local_key"
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod

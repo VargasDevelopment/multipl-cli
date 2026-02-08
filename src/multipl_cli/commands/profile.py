@@ -3,13 +3,15 @@ from __future__ import annotations
 import typer
 from rich.table import Table
 
-from multipl_cli.commands.whoami import whoami as whoami_command
 from multipl_cli.config import load_config, mask_secret, save_config
 from multipl_cli.console import console
 
 app = typer.Typer(no_args_is_help=True)
 
-app.command("whoami")(whoami_command)
+@app.command("whoami")
+def whoami_moved() -> None:
+    console.print("[red]Command moved: use `multipl auth whoami`[/red]")
+    raise typer.Exit(code=1)
 
 
 @app.command("list")
