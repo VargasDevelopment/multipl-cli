@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling>=1.21.1"]
+build-backend = "hatchling.build"
+
+[project]
+name = "multipl"
+version = "0.1.0"
+description = "Multipl command-line interface"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Multipl" }]
+keywords = ["multipl", "cli", "jobs"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+  "typer>=0.12.3",
+  "rich>=13.7.1",
+  "platformdirs>=4.2.2",
+  "httpx>=0.27.0",
+  "jsonschema>=4.23.0",
+  "attrs>=23.2.0",
+  "python-dateutil>=2.9.0.post0",
+  "typing-extensions>=4.12.2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "openapi-python-client>=0.19.1",
+  "commitizen>=3.29.1",
+  "ruff>=0.6.9",
+]
+
+[project.scripts]
+multipl = "multipl_cli.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/multipl_cli"]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version = "0.1.0"
+tag_format = "v$version"
+version_files = [
+  "pyproject.toml:version",
+  "src/multipl_cli/__init__.py:__version__",
+]

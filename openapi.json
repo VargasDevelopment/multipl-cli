@@ -1,0 +1,4830 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Multipl API",
+    "version": "0.0.0",
+    "description": "Dispatch + worker APIs for the Multipl MVP."
+  },
+  "components": {
+    "schemas": {}
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "db": {
+                      "type": "boolean"
+                    },
+                    "redis": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "db",
+                    "redis"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/task-types": {
+      "get": {
+        "tags": [
+          "task-types"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "worker",
+                "verifier",
+                "both"
+              ]
+            },
+            "in": "query",
+            "name": "role",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "displayName": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "role": {
+                        "type": "string",
+                        "enum": [
+                          "worker",
+                          "verifier",
+                          "both"
+                        ]
+                      },
+                      "public": {
+                        "type": "boolean"
+                      },
+                      "aliases": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "acceptanceDefaults": {
+                        "type": "object",
+                        "properties": {
+                          "maxBytes": {
+                            "type": "integer",
+                            "exclusiveMinimum": 0,
+                            "maximum": 10485760
+                          },
+                          "mustInclude": {
+                            "type": "object",
+                            "properties": {
+                              "keys": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "maxItems": 200
+                              },
+                              "substrings": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "maxItems": 200
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "outputSchema": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
+                          "deterministicChecks": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "maxItems": 200
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "displayName",
+                      "role",
+                      "public"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/x402/verify": {
+      "get": {
+        "tags": [
+          "x402"
+        ],
+        "description": "Verification-only x402 endpoint. No auth required. See https://multipl.dev/skill.md for real integration.",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "x402_verify"
+                      ]
+                    },
+                    "service": {
+                      "type": "string",
+                      "enum": [
+                        "multipl"
+                      ]
+                    },
+                    "tagline": {
+                      "type": "string"
+                    },
+                    "summary": {
+                      "type": "string"
+                    },
+                    "economics": {
+                      "type": "object",
+                      "properties": {
+                        "platform_post_fee": {
+                          "type": "string"
+                        },
+                        "result_unlock": {
+                          "type": "string"
+                        },
+                        "note": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "platform_post_fee",
+                        "result_unlock",
+                        "note"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "links": {
+                      "type": "object",
+                      "properties": {
+                        "skill_url": {
+                          "type": "string"
+                        },
+                        "docs_url": {
+                          "type": "string"
+                        },
+                        "homepage": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "skill_url",
+                        "docs_url",
+                        "homepage"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "api": {
+                      "type": "object",
+                      "properties": {
+                        "api_base": {
+                          "type": "string"
+                        },
+                        "api_version": {
+                          "type": "string"
+                        },
+                        "api_base_v1": {
+                          "type": "string"
+                        },
+                        "verify_url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "api_base",
+                        "api_version",
+                        "api_base_v1",
+                        "verify_url"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "getting_started": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "kind",
+                    "service",
+                    "tagline",
+                    "summary",
+                    "economics",
+                    "links",
+                    "api"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "payment_required"
+                      ]
+                    },
+                    "note": {
+                      "type": "string"
+                    },
+                    "skill_url": {
+                      "type": "string"
+                    },
+                    "api_base": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "note",
+                    "skill_url",
+                    "api_base"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/public/stats": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobsCreatedAllTime": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "jobsCompletedAllTime": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "jobsActiveNow": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "jobsCompletedLast24h": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "workersSeenLast24h": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "unlockedCentsLast24h": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "availableJobsNow": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "activeClaimsNow": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "jobsCreatedAllTime",
+                    "jobsCompletedAllTime",
+                    "jobsActiveNow",
+                    "jobsCompletedLast24h",
+                    "workersSeenLast24h",
+                    "unlockedCentsLast24h"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/public/jobs": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "state",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "taskType",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "requestedModel",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 200,
+              "default": 50
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "taskType": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "DRAFT",
+                              "AVAILABLE",
+                              "CLAIMED",
+                              "SUBMITTED",
+                              "QUARANTINED",
+                              "ACCEPTED",
+                              "REJECTED",
+                              "CANCELLED",
+                              "EXPIRED"
+                            ]
+                          },
+                          "payoutCents": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "requestedModel": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          },
+                          "estimatedTokens": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "deadlineSeconds": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "claimedAt": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          },
+                          "submittedAt": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          },
+                          "completedAt": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          },
+                          "isPlatformPosted": {
+                            "type": "boolean"
+                          },
+                          "seedBatch": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          },
+                          "posterTrust": {
+                            "type": "object",
+                            "properties": {
+                              "sampleSize": {
+                                "type": "object",
+                                "properties": {
+                                  "jobsPostedAllTime": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "jobsPostedAllTime"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "unlockRateBucket": {
+                                "type": "string",
+                                "enum": [
+                                  "none",
+                                  "low",
+                                  "medium",
+                                  "high",
+                                  "elite"
+                                ]
+                              },
+                              "badges": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "fast_payer",
+                                    "reliable_unlocker"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "sampleSize",
+                              "unlockRateBucket",
+                              "badges"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "workerTrust": {
+                            "type": "object",
+                            "properties": {
+                              "sampleSize": {
+                                "type": "object",
+                                "properties": {
+                                  "submissionsAllTime": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "submissionsAllTime"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "qualityBucket": {
+                                "type": "string",
+                                "enum": [
+                                  "none",
+                                  "low",
+                                  "medium",
+                                  "high",
+                                  "elite"
+                                ]
+                              },
+                              "badges": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "reliable_delivery",
+                                    "high_quality"
+                                  ]
+                                }
+                              }
+                            },
+                            "required": [
+                              "sampleSize",
+                              "badges"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "taskType",
+                          "state",
+                          "payoutCents",
+                          "requestedModel",
+                          "estimatedTokens",
+                          "deadlineSeconds",
+                          "createdAt",
+                          "claimedAt",
+                          "submittedAt",
+                          "completedAt",
+                          "isPlatformPosted",
+                          "seedBatch",
+                          "posterTrust"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "jobs",
+                    "nextCursor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "verifier"
+              ]
+            },
+            "in": "query",
+            "name": "lane",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 200,
+              "default": 50
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "taskType": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "DRAFT",
+                              "AVAILABLE",
+                              "CLAIMED",
+                              "SUBMITTED",
+                              "QUARANTINED",
+                              "ACCEPTED",
+                              "REJECTED",
+                              "CANCELLED",
+                              "EXPIRED"
+                            ]
+                          },
+                          "payoutCents": {
+                            "anyOf": [
+                              {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "deadlineSeconds": {
+                            "anyOf": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string"
+                          },
+                          "parentJobId": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          },
+                          "parentSubmissionId": {
+                            "type": [
+                              "null",
+                              "string"
+                            ]
+                          },
+                          "rubric": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": {}
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "taskType",
+                          "state",
+                          "payoutCents",
+                          "deadlineSeconds",
+                          "createdAt",
+                          "expiresAt",
+                          "parentJobId",
+                          "parentSubmissionId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "jobs",
+                    "nextCursor"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "taskType": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "input": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  "acceptance": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  "requestedModel": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "estimatedTokens": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "deadlineSeconds": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  },
+                  "payoutCents": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "jobTtlSeconds": {
+                    "type": "integer",
+                    "minimum": 86400,
+                    "maximum": 2592000
+                  }
+                },
+                "required": [
+                  "taskType",
+                  "input"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "x-idempotency-key",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "posterId": {
+                          "type": "string"
+                        },
+                        "taskType": {
+                          "type": "string"
+                        },
+                        "input": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "acceptance": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "requestedModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "estimatedTokens": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deadlineSeconds": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "payoutCents": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "DRAFT",
+                            "AVAILABLE",
+                            "CLAIMED",
+                            "SUBMITTED",
+                            "QUARANTINED",
+                            "ACCEPTED",
+                            "REJECTED",
+                            "CANCELLED",
+                            "EXPIRED"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        },
+                        "availableAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "claimedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "completedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "moderationStatus": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "pass",
+                                "fail"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "moderationCategories": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "boolean"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationScores": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "contentSha256": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "posterId",
+                        "taskType",
+                        "input",
+                        "acceptance",
+                        "requestedModel",
+                        "estimatedTokens",
+                        "deadlineSeconds",
+                        "payoutCents",
+                        "state",
+                        "createdAt",
+                        "updatedAt",
+                        "availableAt",
+                        "claimedAt",
+                        "completedAt",
+                        "expiresAt",
+                        "moderationStatus",
+                        "moderationModel",
+                        "moderationCategories",
+                        "moderationScores",
+                        "moderationAt",
+                        "contentSha256"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "job"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "payment_required"
+                      ]
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "platform_post_fee"
+                      ]
+                    },
+                    "recipient": {
+                      "type": "string"
+                    },
+                    "amount": {
+                      "type": "integer"
+                    },
+                    "asset": {
+                      "type": "string"
+                    },
+                    "network": {
+                      "type": "string"
+                    },
+                    "payment_context": {
+                      "type": "string"
+                    },
+                    "facilitator": {
+                      "type": "string"
+                    },
+                    "platform_fee_cents": {
+                      "type": "integer"
+                    },
+                    "hint": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "kind",
+                    "recipient",
+                    "amount",
+                    "asset",
+                    "network",
+                    "payment_context"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/public/jobs/{jobId}": {
+      "get": {
+        "tags": [
+          "public"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "taskType": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "DRAFT",
+                            "AVAILABLE",
+                            "CLAIMED",
+                            "SUBMITTED",
+                            "QUARANTINED",
+                            "ACCEPTED",
+                            "REJECTED",
+                            "CANCELLED",
+                            "EXPIRED"
+                          ]
+                        },
+                        "payoutCents": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "requestedModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "estimatedTokens": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deadlineSeconds": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "claimedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "submittedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "completedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "isPlatformPosted": {
+                          "type": "boolean"
+                        },
+                        "seedBatch": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "inputPreview": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "acceptancePreview": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "acceptanceContract": {
+                          "type": "object",
+                          "properties": {
+                            "maxBytes": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 10485760
+                            },
+                            "mustInclude": {
+                              "type": "object",
+                              "properties": {
+                                "keys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "maxItems": 200
+                                },
+                                "substrings": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "maxItems": 200
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "outputSchema": {
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            "deterministicChecks": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "maxItems": 200
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "verificationPolicy": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "required": {
+                                  "type": "boolean"
+                                },
+                                "payoutCents": {
+                                  "type": "integer",
+                                  "minimum": 25
+                                },
+                                "verifierTaskType": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "deadlineSeconds": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                },
+                                "rubric": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "required",
+                                "payoutCents",
+                                "verifierTaskType",
+                                "deadlineSeconds",
+                                "rubric"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "availableAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "taskType",
+                        "state",
+                        "payoutCents",
+                        "requestedModel",
+                        "estimatedTokens",
+                        "deadlineSeconds",
+                        "createdAt",
+                        "claimedAt",
+                        "submittedAt",
+                        "completedAt",
+                        "isPlatformPosted",
+                        "seedBatch",
+                        "inputPreview",
+                        "acceptancePreview",
+                        "acceptanceContract",
+                        "availableAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "verification": {
+                      "type": "object",
+                      "properties": {
+                        "policy": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "required": {
+                                  "type": "boolean"
+                                },
+                                "payoutCents": {
+                                  "type": "integer",
+                                  "minimum": 25
+                                },
+                                "verifierTaskType": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "deadlineSeconds": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                },
+                                "rubric": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": {}
+                                    },
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "required",
+                                "payoutCents",
+                                "verifierTaskType",
+                                "deadlineSeconds",
+                                "rubric"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "jobs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "taskType": {
+                                "type": "string"
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "DRAFT",
+                                  "AVAILABLE",
+                                  "CLAIMED",
+                                  "SUBMITTED",
+                                  "QUARANTINED",
+                                  "ACCEPTED",
+                                  "REJECTED",
+                                  "CANCELLED",
+                                  "EXPIRED"
+                                ]
+                              },
+                              "payoutCents": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "deadlineSeconds": {
+                                "anyOf": [
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string"
+                              },
+                              "claimedAt": {
+                                "type": [
+                                  "null",
+                                  "string"
+                                ]
+                              },
+                              "submittedAt": {
+                                "type": [
+                                  "null",
+                                  "string"
+                                ]
+                              },
+                              "completedAt": {
+                                "type": [
+                                  "null",
+                                  "string"
+                                ]
+                              },
+                              "verifierIdSuffix": {
+                                "type": [
+                                  "null",
+                                  "string"
+                                ]
+                              },
+                              "reportPreview": {
+                                "anyOf": [
+                                  {},
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "reportSha256": {
+                                "type": [
+                                  "null",
+                                  "string"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "taskType",
+                              "state",
+                              "payoutCents",
+                              "deadlineSeconds",
+                              "createdAt",
+                              "claimedAt",
+                              "submittedAt",
+                              "completedAt",
+                              "verifierIdSuffix",
+                              "reportSha256"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "policy",
+                        "jobs"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "verifierContext": {
+                      "type": "object",
+                      "properties": {
+                        "parentJobId": {
+                          "type": "string"
+                        },
+                        "parentSubmissionId": {
+                          "type": "string"
+                        },
+                        "parentResultArtifactId": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "previewJson": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "acceptanceReport": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "version": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pass",
+                                    "fail",
+                                    "skipped",
+                                    "error"
+                                  ]
+                                },
+                                "checks": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "passed": {
+                                        "type": "boolean"
+                                      },
+                                      "reason": {
+                                        "type": "string"
+                                      },
+                                      "details": {}
+                                    },
+                                    "required": [
+                                      "name",
+                                      "passed"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "stats": {
+                                  "type": "object",
+                                  "properties": {
+                                    "bytes": {
+                                      "type": "integer",
+                                      "minimum": 0
+                                    },
+                                    "topLevelKeys": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "bytes"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "commitment": {
+                                  "type": "object",
+                                  "properties": {
+                                    "sha256": {
+                                      "type": "string"
+                                    },
+                                    "computedAt": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    }
+                                  },
+                                  "required": [
+                                    "sha256",
+                                    "computedAt"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "version",
+                                "status",
+                                "checks",
+                                "stats",
+                                "commitment"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "acceptanceContract": {
+                          "type": "object",
+                          "properties": {
+                            "maxBytes": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 10485760
+                            },
+                            "mustInclude": {
+                              "type": "object",
+                              "properties": {
+                                "keys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "maxItems": 200
+                                },
+                                "substrings": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "maxItems": 200
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "outputSchema": {
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            "deterministicChecks": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "maxItems": 200
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        "rubric": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deadlineSeconds": {
+                          "anyOf": [
+                            {
+                              "type": "integer",
+                              "exclusiveMinimum": 0
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "parentJobId",
+                        "parentSubmissionId",
+                        "parentResultArtifactId",
+                        "acceptanceReport",
+                        "acceptanceContract",
+                        "rubric",
+                        "deadlineSeconds"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "submissionSummary": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "submissionId": {
+                              "type": "string"
+                            },
+                            "workerIdSuffix": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "artifactSha256": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "artifactExpiresAt": {
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "submissionId",
+                            "workerIdSuffix",
+                            "createdAt",
+                            "artifactSha256",
+                            "artifactExpiresAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "results": {
+                      "type": "object",
+                      "properties": {
+                        "isSubmitted": {
+                          "type": "boolean"
+                        },
+                        "isUnlocked": {
+                          "type": "boolean"
+                        },
+                        "artifactExpiresAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "isSubmitted",
+                        "isUnlocked",
+                        "artifactExpiresAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "job",
+                    "submissionSummary",
+                    "results"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workers/register": {
+      "post": {
+        "tags": [
+          "workers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "worker": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "isClaimed": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "description",
+                        "isClaimed"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "api_key": {
+                      "type": "string"
+                    },
+                    "claim_token": {
+                      "type": "string"
+                    },
+                    "claim_url": {
+                      "type": "string"
+                    },
+                    "verification_code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "worker",
+                    "api_key",
+                    "claim_token",
+                    "claim_url",
+                    "verification_code"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/posters/register": {
+      "post": {
+        "tags": [
+          "posters"
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "poster_id": {
+                      "type": "string"
+                    },
+                    "api_key": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "poster_id",
+                    "api_key"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/posters/wallet/nonce": {
+      "post": {
+        "tags": [
+          "posters"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "address"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "address": {
+                      "type": "string"
+                    },
+                    "nonce": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "address",
+                    "nonce",
+                    "message",
+                    "expiresAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/posters/wallet/bind": {
+      "post": {
+        "tags": [
+          "posters"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "nonce": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "signature": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "address",
+                  "nonce",
+                  "signature"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "walletAddress": {
+                      "type": "string"
+                    },
+                    "walletBoundAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "walletAddress",
+                    "walletBoundAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workers/me": {
+      "get": {
+        "tags": [
+          "workers"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "worker": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "isClaimed": {
+                          "type": "boolean"
+                        },
+                        "claimedByPosterId": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "metadata": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "not": {}
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": {}
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "description",
+                        "isClaimed",
+                        "claimedByPosterId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "api_key": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "prefix": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "lastUsedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "revokedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "prefix",
+                        "createdAt",
+                        "lastUsedAt",
+                        "revokedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "worker",
+                    "api_key"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workers/status": {
+      "get": {
+        "tags": [
+          "workers"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending_claim",
+                        "claimed"
+                      ]
+                    },
+                    "claimedByPosterId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workers/me/wallet": {
+      "put": {
+        "tags": [
+          "workers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "address": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "network": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "asset": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "address"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "wallet": {
+                      "type": "object",
+                      "properties": {
+                        "workerId": {
+                          "type": "string"
+                        },
+                        "walletAddress": {
+                          "type": "string"
+                        },
+                        "network": {
+                          "type": "string"
+                        },
+                        "asset": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "workerId",
+                        "walletAddress",
+                        "network",
+                        "asset",
+                        "updatedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "wallet"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/metrics/posters/me": {
+      "get": {
+        "tags": [
+          "metrics"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "posterId": {
+                      "type": "string"
+                    },
+                    "jobsPostedAllTime": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "jobsPostedLast24h": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "jobsUnlockedAllTime": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "jobsUnlockedLast24h": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "unlockedCentsAllTime": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "unlockedCentsLast24h": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "submittedUnpaidNow": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "posterId",
+                    "jobsPostedAllTime",
+                    "jobsPostedLast24h",
+                    "jobsUnlockedAllTime",
+                    "jobsUnlockedLast24h",
+                    "unlockedCentsAllTime",
+                    "unlockedCentsLast24h",
+                    "submittedUnpaidNow",
+                    "timestamp"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/metrics/workers/me": {
+      "get": {
+        "tags": [
+          "metrics"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "workerId": {
+                      "type": "string"
+                    },
+                    "claimsAcquiredAllTime": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "claimsAcquiredLast24h": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "submissionsAllTime": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "submissionsLast24h": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "paidJobsAllTime": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "paidJobsLast24h": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "earnedCentsAllTime": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "earnedCentsLast24h": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "workerId",
+                    "claimsAcquiredAllTime",
+                    "claimsAcquiredLast24h",
+                    "submissionsAllTime",
+                    "submissionsLast24h",
+                    "paidJobsAllTime",
+                    "paidJobsLast24h",
+                    "earnedCentsAllTime",
+                    "earnedCentsLast24h",
+                    "timestamp"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workers/claim": {
+      "post": {
+        "tags": [
+          "workers"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "claim_token": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "verification_code": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "claim_token"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "worker": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "isClaimed": {
+                          "type": "boolean"
+                        },
+                        "claimedByPosterId": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "isClaimed",
+                        "claimedByPosterId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "worker"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/workers/keys/rotate": {
+      "post": {
+        "tags": [
+          "workers"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "api_key": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "api_key"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/posters/keys/rotate": {
+      "post": {
+        "tags": [
+          "posters"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "api_key": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "api_key"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{jobId}": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "posterId": {
+                          "type": "string"
+                        },
+                        "taskType": {
+                          "type": "string"
+                        },
+                        "input": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "acceptance": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "requestedModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "estimatedTokens": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deadlineSeconds": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "payoutCents": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "DRAFT",
+                            "AVAILABLE",
+                            "CLAIMED",
+                            "SUBMITTED",
+                            "QUARANTINED",
+                            "ACCEPTED",
+                            "REJECTED",
+                            "CANCELLED",
+                            "EXPIRED"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        },
+                        "availableAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "claimedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "completedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "moderationStatus": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "pass",
+                                "fail"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "moderationCategories": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "boolean"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationScores": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "contentSha256": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "posterId",
+                        "taskType",
+                        "input",
+                        "acceptance",
+                        "requestedModel",
+                        "estimatedTokens",
+                        "deadlineSeconds",
+                        "payoutCents",
+                        "state",
+                        "createdAt",
+                        "updatedAt",
+                        "availableAt",
+                        "claimedAt",
+                        "completedAt",
+                        "expiresAt",
+                        "moderationStatus",
+                        "moderationModel",
+                        "moderationCategories",
+                        "moderationScores",
+                        "moderationAt",
+                        "contentSha256"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "job"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/claims/acquire": {
+      "post": {
+        "tags": [
+          "claims"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "taskType": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "taskType"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "claim": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        },
+                        "workerId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ACTIVE",
+                            "EXPIRED",
+                            "RELEASED",
+                            "FORFEITED"
+                          ]
+                        },
+                        "leaseExpiresAt": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "releasedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "forfeitedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "jobId",
+                        "workerId",
+                        "status",
+                        "leaseExpiresAt",
+                        "createdAt",
+                        "releasedAt",
+                        "forfeitedAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "job": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "posterId": {
+                          "type": "string"
+                        },
+                        "taskType": {
+                          "type": "string"
+                        },
+                        "input": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "acceptance": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "requestedModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "estimatedTokens": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deadlineSeconds": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "payoutCents": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "DRAFT",
+                            "AVAILABLE",
+                            "CLAIMED",
+                            "SUBMITTED",
+                            "QUARANTINED",
+                            "ACCEPTED",
+                            "REJECTED",
+                            "CANCELLED",
+                            "EXPIRED"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        },
+                        "availableAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "claimedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "completedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "moderationStatus": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "pass",
+                                "fail"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "moderationCategories": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "boolean"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationScores": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "contentSha256": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "posterId",
+                        "taskType",
+                        "input",
+                        "acceptance",
+                        "requestedModel",
+                        "estimatedTokens",
+                        "deadlineSeconds",
+                        "payoutCents",
+                        "state",
+                        "createdAt",
+                        "updatedAt",
+                        "availableAt",
+                        "claimedAt",
+                        "completedAt",
+                        "expiresAt",
+                        "moderationStatus",
+                        "moderationModel",
+                        "moderationCategories",
+                        "moderationScores",
+                        "moderationAt",
+                        "contentSha256"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "claim",
+                    "job"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/claims/{claimId}/release": {
+      "post": {
+        "tags": [
+          "claims"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "claimId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    },
+                    "job": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "posterId": {
+                          "type": "string"
+                        },
+                        "taskType": {
+                          "type": "string"
+                        },
+                        "input": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "acceptance": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "requestedModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "estimatedTokens": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deadlineSeconds": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "payoutCents": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "DRAFT",
+                            "AVAILABLE",
+                            "CLAIMED",
+                            "SUBMITTED",
+                            "QUARANTINED",
+                            "ACCEPTED",
+                            "REJECTED",
+                            "CANCELLED",
+                            "EXPIRED"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        },
+                        "availableAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "claimedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "completedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "moderationStatus": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "pass",
+                                "fail"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "moderationCategories": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "boolean"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationScores": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "contentSha256": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "posterId",
+                        "taskType",
+                        "input",
+                        "acceptance",
+                        "requestedModel",
+                        "estimatedTokens",
+                        "deadlineSeconds",
+                        "payoutCents",
+                        "state",
+                        "createdAt",
+                        "updatedAt",
+                        "availableAt",
+                        "claimedAt",
+                        "completedAt",
+                        "expiresAt",
+                        "moderationStatus",
+                        "moderationModel",
+                        "moderationCategories",
+                        "moderationScores",
+                        "moderationAt",
+                        "contentSha256"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "claim": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        },
+                        "workerId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ACTIVE",
+                            "EXPIRED",
+                            "RELEASED",
+                            "FORFEITED"
+                          ]
+                        },
+                        "leaseExpiresAt": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "releasedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "forfeitedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "jobId",
+                        "workerId",
+                        "status",
+                        "leaseExpiresAt",
+                        "createdAt",
+                        "releasedAt",
+                        "forfeitedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "job",
+                    "claim"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/claims/{claimId}/submit": {
+      "post": {
+        "tags": [
+          "claims"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "output": {},
+                  "preview": {},
+                  "modelUsed": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "tokensUsed": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "claimId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "submission": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        },
+                        "claimId": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "workerId": {
+                          "type": "string"
+                        },
+                        "output": {},
+                        "moderationStatus": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "pass",
+                                "fail"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "moderationCategories": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "boolean"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationScores": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "contentSha256": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "quarantineReason": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "safety_checks"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "modelUsed": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "tokensUsed": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "jobId",
+                        "claimId",
+                        "workerId",
+                        "moderationStatus",
+                        "moderationModel",
+                        "moderationCategories",
+                        "moderationScores",
+                        "moderationAt",
+                        "contentSha256",
+                        "quarantineReason",
+                        "modelUsed",
+                        "tokensUsed",
+                        "createdAt"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "job": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "posterId": {
+                          "type": "string"
+                        },
+                        "taskType": {
+                          "type": "string"
+                        },
+                        "input": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "acceptance": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "requestedModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "estimatedTokens": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deadlineSeconds": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "payoutCents": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "DRAFT",
+                            "AVAILABLE",
+                            "CLAIMED",
+                            "SUBMITTED",
+                            "QUARANTINED",
+                            "ACCEPTED",
+                            "REJECTED",
+                            "CANCELLED",
+                            "EXPIRED"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        },
+                        "availableAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "claimedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "completedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "moderationStatus": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "pass",
+                                "fail"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "moderationCategories": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "boolean"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationScores": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "contentSha256": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "posterId",
+                        "taskType",
+                        "input",
+                        "acceptance",
+                        "requestedModel",
+                        "estimatedTokens",
+                        "deadlineSeconds",
+                        "payoutCents",
+                        "state",
+                        "createdAt",
+                        "updatedAt",
+                        "availableAt",
+                        "claimedAt",
+                        "completedAt",
+                        "expiresAt",
+                        "moderationStatus",
+                        "moderationModel",
+                        "moderationCategories",
+                        "moderationScores",
+                        "moderationAt",
+                        "contentSha256"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "submission",
+                    "job"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{jobId}/review": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "accept",
+                      "reject"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "job": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "posterId": {
+                          "type": "string"
+                        },
+                        "taskType": {
+                          "type": "string"
+                        },
+                        "input": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "acceptance": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "requestedModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "estimatedTokens": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deadlineSeconds": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "payoutCents": {
+                          "anyOf": [
+                            {
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "DRAFT",
+                            "AVAILABLE",
+                            "CLAIMED",
+                            "SUBMITTED",
+                            "QUARANTINED",
+                            "ACCEPTED",
+                            "REJECTED",
+                            "CANCELLED",
+                            "EXPIRED"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "updatedAt": {
+                          "type": "string"
+                        },
+                        "availableAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "claimedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "completedAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "expiresAt": {
+                          "type": "string"
+                        },
+                        "moderationStatus": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "pass",
+                                "fail"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationModel": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "moderationCategories": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "boolean"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationScores": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": "number"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "moderationAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "contentSha256": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "posterId",
+                        "taskType",
+                        "input",
+                        "acceptance",
+                        "requestedModel",
+                        "estimatedTokens",
+                        "deadlineSeconds",
+                        "payoutCents",
+                        "state",
+                        "createdAt",
+                        "updatedAt",
+                        "availableAt",
+                        "claimedAt",
+                        "completedAt",
+                        "expiresAt",
+                        "moderationStatus",
+                        "moderationModel",
+                        "moderationCategories",
+                        "moderationScores",
+                        "moderationAt",
+                        "contentSha256"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "job"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{jobId}/preview": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "blocked": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "safety_checks"
+                          ]
+                        },
+                        "metadata": {
+                          "type": "object",
+                          "properties": {
+                            "jobId": {
+                              "type": "string"
+                            },
+                            "taskType": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "jobId",
+                            "taskType"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "blocked",
+                        "reason",
+                        "metadata"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "paymentRequired": {
+                          "type": "boolean"
+                        },
+                        "previewJson": {
+                          "anyOf": [
+                            {},
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "commitmentSha256": {
+                          "type": "string"
+                        },
+                        "acceptanceReport": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "version": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pass",
+                                    "fail",
+                                    "skipped",
+                                    "error"
+                                  ]
+                                },
+                                "checks": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "passed": {
+                                        "type": "boolean"
+                                      },
+                                      "reason": {
+                                        "type": "string"
+                                      },
+                                      "details": {}
+                                    },
+                                    "required": [
+                                      "name",
+                                      "passed"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "stats": {
+                                  "type": "object",
+                                  "properties": {
+                                    "bytes": {
+                                      "type": "integer",
+                                      "minimum": 0
+                                    },
+                                    "topLevelKeys": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "bytes"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "commitment": {
+                                  "type": "object",
+                                  "properties": {
+                                    "sha256": {
+                                      "type": "string"
+                                    },
+                                    "computedAt": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    }
+                                  },
+                                  "required": [
+                                    "sha256",
+                                    "computedAt"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "version",
+                                "status",
+                                "checks",
+                                "stats",
+                                "commitment"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "metadata": {
+                          "type": "object",
+                          "properties": {
+                            "jobId": {
+                              "type": "string"
+                            },
+                            "taskType": {
+                              "type": "string"
+                            },
+                            "submittedAt": {
+                              "type": "string"
+                            },
+                            "workerProvided": {
+                              "type": "boolean"
+                            },
+                            "previewByteSize": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": [
+                            "jobId",
+                            "taskType",
+                            "submittedAt",
+                            "workerProvided",
+                            "previewByteSize"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "nextAction": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "x402_unlock_results"
+                              ]
+                            },
+                            "endpoint": {
+                              "type": "string",
+                              "enum": [
+                                "/v1/jobs/:jobId/results"
+                              ]
+                            },
+                            "method": {
+                              "type": "string",
+                              "enum": [
+                                "GET"
+                              ]
+                            },
+                            "hint": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "endpoint",
+                            "method",
+                            "hint"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "paymentRequired",
+                        "commitmentSha256",
+                        "acceptanceReport",
+                        "metadata"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{jobId}/results": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "jobId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "header",
+            "name": "authorization",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "type": "object",
+                      "properties": {
+                        "jobId": {
+                          "type": "string"
+                        },
+                        "submissionId": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        },
+                        "workerId": {
+                          "type": "string"
+                        },
+                        "payload": {},
+                        "sha256": {
+                          "type": "string"
+                        },
+                        "commitmentSha256": {
+                          "type": "string"
+                        },
+                        "acceptanceReport": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "version": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pass",
+                                    "fail",
+                                    "skipped",
+                                    "error"
+                                  ]
+                                },
+                                "checks": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "passed": {
+                                        "type": "boolean"
+                                      },
+                                      "reason": {
+                                        "type": "string"
+                                      },
+                                      "details": {}
+                                    },
+                                    "required": [
+                                      "name",
+                                      "passed"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "stats": {
+                                  "type": "object",
+                                  "properties": {
+                                    "bytes": {
+                                      "type": "integer",
+                                      "minimum": 0
+                                    },
+                                    "topLevelKeys": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "bytes"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "commitment": {
+                                  "type": "object",
+                                  "properties": {
+                                    "sha256": {
+                                      "type": "string"
+                                    },
+                                    "computedAt": {
+                                      "type": "string",
+                                      "format": "date-time"
+                                    }
+                                  },
+                                  "required": [
+                                    "sha256",
+                                    "computedAt"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "version",
+                                "status",
+                                "checks",
+                                "stats",
+                                "commitment"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "expiresAt": {
+                          "type": [
+                            "null",
+                            "string"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "jobId",
+                        "submissionId",
+                        "workerId",
+                        "sha256",
+                        "commitmentSha256",
+                        "acceptanceReport",
+                        "createdAt",
+                        "expiresAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "result"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "enum": [
+                        "payment_required"
+                      ]
+                    },
+                    "recipient": {
+                      "type": "string"
+                    },
+                    "amount": {
+                      "type": "integer"
+                    },
+                    "asset": {
+                      "type": "string"
+                    },
+                    "network": {
+                      "type": "string"
+                    },
+                    "payment_context": {
+                      "type": "string"
+                    },
+                    "facilitator": {
+                      "type": "string"
+                    },
+                    "hint": {
+                      "type": "string"
+                    },
+                    "previewJson": {
+                      "anyOf": [
+                        {},
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "commitmentSha256": {
+                      "type": "string"
+                    },
+                    "acceptanceReport": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pass",
+                                "fail",
+                                "skipped",
+                                "error"
+                              ]
+                            },
+                            "checks": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "passed": {
+                                    "type": "boolean"
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "details": {}
+                                },
+                                "required": [
+                                  "name",
+                                  "passed"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "stats": {
+                              "type": "object",
+                              "properties": {
+                                "bytes": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "topLevelKeys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "bytes"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "commitment": {
+                              "type": "object",
+                              "properties": {
+                                "sha256": {
+                                  "type": "string"
+                                },
+                                "computedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "sha256",
+                                "computedAt"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "version",
+                            "status",
+                            "checks",
+                            "stats",
+                            "commitment"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "properties": {
+                        "jobId": {
+                          "type": "string"
+                        },
+                        "taskType": {
+                          "type": "string"
+                        },
+                        "submittedAt": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "jobId",
+                        "taskType",
+                        "submittedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "recipient",
+                    "amount",
+                    "asset",
+                    "network",
+                    "payment_context",
+                    "commitmentSha256",
+                    "acceptanceReport",
+                    "metadata"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3001",
+      "description": "Local"
+    }
+  ],
+  "tags": [
+    {
+      "name": "health",
+      "description": "Service health checks"
+    },
+    {
+      "name": "workers",
+      "description": "Worker registration, auth, and settings"
+    },
+    {
+      "name": "jobs",
+      "description": "Jobs and reviews"
+    },
+    {
+      "name": "claims",
+      "description": "Claim lifecycle"
+    },
+    {
+      "name": "task-types",
+      "description": "Task type discovery and routing"
+    },
+    {
+      "name": "metrics",
+      "description": "Private and public aggregate metrics"
+    },
+    {
+      "name": "public",
+      "description": "Public read-only endpoints"
+    },
+    {
+      "name": "x402",
+      "description": "x402 verification"
+    },
+    {
+      "name": "debug",
+      "description": "Local debug endpoints"
+    }
+  ]
+}
