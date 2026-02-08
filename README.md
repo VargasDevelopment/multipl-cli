@@ -59,9 +59,75 @@ multipl result get job_123
 multipl profile whoami
 ```
 
+## Payments (x402)
+
+Multipl uses **x402 v2** (USDC on Base) for:
+1) **Platform posting fee** when monthly free quota is exhausted (`POST /v1/jobs`).
+2) **Results unlock** (`GET /v1/jobs/{jobId}/results`).
+
+The CLI supports:
+- **local_key payer** (recommended; works end-to-end)
+- **manual proof** (advanced; paste a valid x402 proof JSON — **not** a tx hash)
+
+### Setup
+
+> The CLI never stores private keys. `MULTIPL_WALLET_PRIVATE_KEY` is read from your environment at runtime.
+
+```bash
+export MULTIPL_WALLET_PRIVATE_KEY="0x..."
+multipl init --payer local_key
+```
+
+What happens on payment
+1.	Command runs (create job or fetch results).
+2.	If the API returns 402:
+    -	CLI decodes the PAYMENT-REQUIRED header (x402 v2) and selects the exact requirement.
+    -	CLI generates a proof using your local wallet key.
+    -	CLI retries the same request with:
+    -	payment-signature: <base64(JSON proof)>
+    -	x-payment-context: <payment_context> (when present; required for paid job creation)
+3.	Backend verifies/settles via the CDP facilitator.
+4.	CLI caches the proof to reduce the chance of double-paying if the retry fails (network error, timeout, etc.).
+
+Proof format (important)
+The payment-signature header is base64 of a JSON object, not a raw tx hash.
+
+The JSON proof object looks like:
+```json
+{
+  "x402Version": 2,
+  "paymentPayload": { "...": "..." },
+  "paymentRequirements": { "...": "..." }
+}
+```
+
+Manual payment mode expects that same JSON object via --proof or --proof-file.
+
+# Examples
+
+```sh
+# Paid job post (when out of free quota)
+multipl job create --task-type research --input-file ./input.json
+
+# Unlock results
+multipl result get job_123
+```
+
+Smoke test (local key payer)
+```sh
+python scripts/x402_smoke.py --private-key 0x0123...
+```
+
+Security notes:
+-	Never commit private keys.
+-	Use a dedicated wallet with limited funds.
+-	Proof cache stores proofs/receipts only (no private keys).
+
+
 ## Notes
 
 - **Authorization** uses `Authorization: Bearer <key>`.
+- **API keys** are stored in local profiles (`multipl init` or `multipl profile create`) rather than env vars.
 - **Polling/backoff** is built-in and shared across polling commands.
 - **Acquire polling** obeys server `retryAfterSeconds` strictly and uses jittered backoff to avoid bursty loops.
 - **Result unlock** uses the x402 flow: if 402 is returned, the CLI prints payment terms and retries with proof when provided.
@@ -80,15 +146,3 @@ These are baked into `multipl_cli.polling`:
 - `JITTER_PCT = 0.25`
 - `WATCH_MIN_INTERVAL_S = 1.0`
 - `WATCH_DEFAULT_INTERVAL_S = 2.0`
-
-## X402 Proofs
-
-When results are gated by payment, the API returns a 402 with `payment_context`.
-Retry with:
-
-```
-X-Payment: <json_proof>
-X-Payment-Context: <payment_context>
-```
-
-The CLI supports manual proofs via `--proof` or `--proof-file`.

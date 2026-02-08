@@ -30,12 +30,14 @@ dependencies = [
   "attrs>=23.2.0",
   "python-dateutil>=2.9.0.post0",
   "typing-extensions>=4.12.2",
+  "x402[evm]>=2.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
   "openapi-python-client>=0.19.1",
   "commitizen>=3.29.1",
+  "pytest>=8.2.0",
   "ruff>=0.6.9",
 ]
 
@@ -53,3 +55,7 @@ version_files = [
   "pyproject.toml:version",
   "src/multipl_cli/__init__.py:__version__",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from dataclasses import dataclass, field
 from hashlib import sha256
@@ -29,8 +30,26 @@ def load_proof_from_file(path: Path) -> dict[str, Any]:
     return parse_proof_value(path.read_text())
 
 
+def _validate_proof_structure(proof: dict[str, Any]) -> None:
+    has_payload = isinstance(proof.get("paymentPayload"), dict)
+    has_requirements = isinstance(proof.get("paymentRequirements"), dict)
+    has_direct_payload = isinstance(proof.get("x402Version"), (int, float)) and isinstance(
+        proof.get("accepted"), dict
+    )
+    if (has_payload and has_requirements) or has_direct_payload:
+        return
+    raise ProofError(
+        "payment proof must include paymentPayload + paymentRequirements (or a direct "
+        "x402 payload with accepted requirements)"
+    )
+
+
 def proof_to_header_value(proof: dict[str, Any]) -> str:
-    return json.dumps(proof, separators=(",", ":"))
+    if not isinstance(proof, dict):
+        raise ProofError("payment proof must be a JSON object")
+    _validate_proof_structure(proof)
+    payload = json.dumps(proof, separators=(",", ":"), sort_keys=True)
+    return base64.b64encode(payload.encode("utf-8")).decode("utf-8")
 
 
 def cache_key_from_terms(terms_id: dict[str, Any]) -> str:

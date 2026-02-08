@@ -12,5 +12,6 @@ class CdpPayer(Payer):
 
     def get_proof(self, terms: PaymentTerms) -> dict:
         raise PayerError(
-            "cdp payer is not implemented: backend/docs do not define a client-side integration"
+            "cdp payer is not implemented: CDP wallet signing isn't wired in the CLI yet. "
+            "Use --payer local_key (with MULTIPL_WALLET_PRIVATE_KEY) or manual proof."
         )

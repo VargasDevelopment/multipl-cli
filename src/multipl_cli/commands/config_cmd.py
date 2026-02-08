@@ -4,7 +4,7 @@ import typer
 from rich.table import Table
 
 from multipl_cli.app_state import AppState
-from multipl_cli.config import mask_secret
+from multipl_cli.config import load_config, mask_secret, save_config
 from multipl_cli.console import console
 
 app = typer.Typer(no_args_is_help=True)
@@ -37,3 +37,23 @@ def show(ctx: typer.Context) -> None:
             mask_secret(profile.worker_api_key) or "-",
         )
     console.print(profiles)
+
+
+@app.command("set")
+def set_config(
+    key: str = typer.Argument(..., help="Config key (payer|base_url)"),
+    value: str = typer.Argument(..., help="Config value"),
+) -> None:
+    config = load_config()
+    if key == "payer":
+        config.payer.type = value
+        save_config(config)
+        console.print(f"[green]Payer set to {value}.[/green]")
+        return
+    if key == "base_url":
+        config.base_url = value
+        save_config(config)
+        console.print(f"[green]Base URL set to {value}.[/green]")
+        return
+    console.print("[red]Unknown config key. Use payer or base_url.[/red]")
+    raise typer.Exit(code=1)
