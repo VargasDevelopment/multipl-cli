@@ -84,8 +84,7 @@ def get_result(
         )
     except PaymentRequiredError as exc:
         terms = exc.terms
-        console.print("[yellow]Payment required to unlock results.[/yellow]")
-        console.print({
+        payload = {
             "recipient": terms.recipient,
             "amount": terms.amount,
             "asset": terms.asset,
@@ -93,7 +92,12 @@ def get_result(
             "payment_context": terms.payment_context,
             "facilitator": terms.facilitator,
             "hint": terms.hint,
-        })
+        }
+        if json_output:
+            console.print(payload)
+        else:
+            console.print("[yellow]Payment required to unlock results.[/yellow]")
+            console.print(payload)
         raise typer.Exit(code=3) from exc
     except PaymentFlowError as exc:
         console.print(f"[red]{exc}[/red]")
