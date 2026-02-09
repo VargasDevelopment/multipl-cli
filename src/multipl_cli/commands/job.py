@@ -3,11 +3,16 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
+from typing import Any
 
+import httpx
 import typer
 from rich.table import Table
 
 from multipl_cli._client.api.jobs.get_v_1_jobs_job_id import sync_detailed as get_job
+from multipl_cli._client.api.jobs.get_v_1_jobs_job_id_preview import (
+    sync_detailed as get_job_preview,
+)
 from multipl_cli._client.api.public.get_v1_public_jobs import sync_detailed as list_public_jobs
 from multipl_cli._client.api.public.get_v_1_public_jobs_job_id import (
     sync_detailed as get_public_job,
@@ -37,6 +42,28 @@ def _load_json(path: Path) -> dict:
     if not isinstance(data, dict):
         raise typer.BadParameter("JSON must be an object")
     return data
+
+
+def _format_preview_blob(value: Any, max_len: int = 4000) -> str:
+    if value is None:
+        text = "null"
+    elif isinstance(value, str):
+        text = value
+    else:
+        try:
+            text = json.dumps(value, indent=2, sort_keys=True)
+        except TypeError:
+            text = str(value)
+    if len(text) > max_len:
+        return f"{text[:max_len]}... (truncated; use --json or --out)"
+    return text
+
+
+def _parse_response_json(response) -> Any | None:
+    try:
+        return json.loads(response.content.decode("utf-8"))
+    except Exception:
+        return None
 
 
 @app.command("list")
@@ -137,6 +164,115 @@ def get_job_cmd(
         console.print(f"[red]Failed to fetch public job (status={response.status_code}).[/red]")
         raise typer.Exit(code=2)
     console.print(response.parsed.to_dict() if json_output else response.parsed.to_dict())
+
+
+@app.command("preview")
+def preview_job(
+    ctx: typer.Context,
+    job_id: str = typer.Argument(..., help="Job ID"),
+    out: Path | None = typer.Option(None, "--out", help="Write preview JSON to file"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON"),
+) -> None:
+    state = ctx.obj
+    if not isinstance(state, AppState):
+        console.print("[red]Internal error: missing app state[/red]")
+        raise typer.Exit(code=1)
+
+    ensure_client_available()
+    profile = state.config.get_active_profile()
+    if not profile.poster_api_key:
+        console.print("[red]Poster API key not configured for active profile.[/red]")
+        raise typer.Exit(code=2)
+
+    client = build_client(state.base_url)
+    response = get_job_preview(
+        client=client, job_id=job_id, authorization=f"Bearer {profile.poster_api_key}"
+    )
+
+    if response.status_code == 200:
+        if response.parsed is not None:
+            payload = response.parsed.to_dict()
+        else:
+            payload = _parse_response_json(response) or {}
+
+        if out:
+            try:
+                out.write_text(json.dumps(payload, indent=2, sort_keys=True))
+            except Exception as exc:
+                console.print(f"[red]Failed to write preview: {exc}[/red]")
+                raise typer.Exit(code=1) from exc
+
+        if json_output:
+            console.print(payload)
+            return
+
+        if out:
+            console.print(f"[green]Wrote preview to {out}[/green]")
+
+        if not isinstance(payload, dict):
+            console.print(payload)
+            return
+
+        table = Table(title="Job Preview")
+        table.add_column("Field")
+        table.add_column("Value")
+
+        if "commitmentSha256" in payload:
+            table.add_row("commitmentSha256", str(payload.get("commitmentSha256")))
+        if "previewJson" in payload:
+            table.add_row("previewJson", _format_preview_blob(payload.get("previewJson")))
+        if "acceptanceReport" in payload:
+            table.add_row(
+                "acceptanceReport",
+                _format_preview_blob(payload.get("acceptanceReport")),
+            )
+        if "blocked" in payload:
+            table.add_row("blocked", str(payload.get("blocked")))
+        if "reason" in payload:
+            table.add_row("reason", str(payload.get("reason")))
+
+        console.print(table)
+        return
+
+    if response.status_code in {401, 403}:
+        console.print("[red]Unauthorized (poster key missing/invalid).[/red]")
+        body = _parse_response_json(response)
+        if body is not None:
+            console.print(body)
+        raise typer.Exit(code=2)
+
+    if response.status_code == 404:
+        console.print("[red]Job not found or not accessible.[/red]")
+        raise typer.Exit(code=2)
+
+    if response.status_code == 429:
+        retry_after = extract_retry_after_seconds(
+            httpx.Response(
+                status_code=int(response.status_code),
+                headers=response.headers,
+                content=response.content,
+            )
+        )
+        if retry_after is not None:
+            console.print(f"Rate limited. Retry after {retry_after}s.")
+        else:
+            console.print("Rate limited.")
+        raise typer.Exit(code=4)
+
+    if response.status_code in {409, 410, 422}:
+        console.print(
+            f"[red]Preview unavailable (status={response.status_code}).[/red]"
+        )
+        body = _parse_response_json(response)
+        if body is not None:
+            console.print(body)
+        raise typer.Exit(code=1)
+
+    console.print(f"[red]Failed to fetch preview (status={response.status_code}).[/red]")
+    body = _parse_response_json(response)
+    if body is not None:
+        console.print(body)
+    raise typer.Exit(code=2)
 
 
 @app.command("create")
