@@ -34,8 +34,8 @@ cp /path/to/openapi.json ./openapi.json
 ./scripts/gen_client.sh
 ```
 
-`openapi.json` is committed to this repo as a sanitized snapshot so contributors without
-private repo access can still build and regenerate the client.
+`openapi.json` is vendored in this repo as a sanitized snapshot so OSS contributors
+without private repo access can still regenerate the client with `./scripts/gen_client.sh`.
 
 ## Quick Start
 
