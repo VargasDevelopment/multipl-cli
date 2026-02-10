@@ -9,6 +9,7 @@ import httpx
 import typer
 from rich.table import Table
 
+from multipl_cli._client.api.jobs.get_v1_jobs import sync_detailed as list_lane_jobs
 from multipl_cli._client.api.jobs.get_v_1_jobs_job_id import sync_detailed as get_job
 from multipl_cli._client.api.jobs.get_v_1_jobs_job_id_preview import (
     sync_detailed as get_job_preview,
@@ -20,6 +21,7 @@ from multipl_cli._client.api.public.get_v1_public_jobs import sync_detailed as l
 from multipl_cli._client.api.public.get_v_1_public_jobs_job_id import (
     sync_detailed as get_public_job,
 )
+from multipl_cli._client.models.get_v1_jobs_lane import GetV1JobsLane
 from multipl_cli._client.models.post_v1_jobs_body import PostV1JobsBody
 from multipl_cli._client.models.post_v1_jobs_body_acceptance import PostV1JobsBodyAcceptance
 from multipl_cli._client.models.post_v1_jobs_body_input import PostV1JobsBodyInput
@@ -163,6 +165,11 @@ def list_jobs(
     ctx: typer.Context,
     task_type: str | None = typer.Option(None, "--task-type", help="Filter by task type"),
     status: str | None = typer.Option(None, "--status", help="Filter by status"),
+    lane: str | None = typer.Option(
+        None,
+        "--lane",
+        help="Optional lane filter (supported value from API: verifier)",
+    ),
     limit: int = typer.Option(50, "--limit", help="Max jobs to return"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
@@ -174,29 +181,69 @@ def list_jobs(
     ensure_client_available()
     client = build_client(state.base_url)
 
-    response = list_public_jobs(
-        client=client,
-        state=status or UNSET,
-        task_type=task_type or UNSET,
-        limit=limit,
-    )
+    lane_enum: GetV1JobsLane | None = None
+    if lane is not None:
+        try:
+            lane_enum = GetV1JobsLane(lane)
+        except ValueError as exc:
+            allowed = ", ".join(item.value for item in GetV1JobsLane)
+            console.print(f"[red]Invalid lane '{lane}'. Allowed values: {allowed}.[/red]")
+            raise typer.Exit(code=1) from exc
 
-    if response.status_code != 200 or response.parsed is None:
+    if lane_enum is not None:
+        if task_type or status:
+            console.print(
+                "[yellow]--task-type/--status are ignored when --lane is provided.[/yellow]"
+            )
+        response = list_lane_jobs(
+            client=client,
+            lane=lane_enum,
+            limit=limit,
+        )
+    else:
+        response = list_public_jobs(
+            client=client,
+            state=status or UNSET,
+            task_type=task_type or UNSET,
+            limit=limit,
+        )
+
+    if response.status_code == 429:
+        retry_after = extract_retry_after_seconds(
+            httpx.Response(
+                status_code=int(response.status_code),
+                headers=response.headers,
+                content=response.content,
+            )
+        )
+        if retry_after is not None:
+            console.print(f"Rate limited. Retry after {retry_after}s.")
+        else:
+            console.print("Rate limited.")
+        raise typer.Exit(code=4)
+
+    if response.status_code != 200:
         console.print(f"[red]Failed to list jobs (status={response.status_code}).[/red]")
+        body = _parse_response_json(response)
+        if body is not None:
+            console.print(body)
         raise typer.Exit(code=2)
 
-    jobs = response.parsed.jobs
+    payload = _parse_response_json(response)
+    if payload is None and response.parsed is not None:
+        payload = response.parsed.to_dict()
+    if not isinstance(payload, dict):
+        console.print("[red]Invalid jobs response payload.[/red]")
+        raise typer.Exit(code=2)
+
     if json_output:
-        next_cursor = (
-            None if response.parsed.next_cursor is UNSET else response.parsed.next_cursor
-        )
-        console.print(
-            {
-                "jobs": [job.to_dict() for job in jobs],
-                "next_cursor": next_cursor,
-            }
-        )
+        console.print(payload)
         return
+
+    jobs = payload.get("jobs")
+    if not isinstance(jobs, list):
+        console.print("[red]Invalid jobs response payload.[/red]")
+        raise typer.Exit(code=2)
 
     table = Table(title="Jobs")
     table.add_column("ID")
@@ -209,20 +256,23 @@ def list_jobs(
     table.add_column("Completed")
 
     for job in jobs:
+        if not isinstance(job, dict):
+            continue
         table.add_row(
-            job.id,
-            job.task_type,
-            job.state,
-            str(job.payout_cents) if job.payout_cents is not None else "-",
-            job.created_at,
-            job.claimed_at or "-",
-            job.submitted_at or "-",
-            job.completed_at or "-",
+            str(job.get("id", "-")),
+            str(job.get("taskType", "-")),
+            str(job.get("state", "-")),
+            str(job.get("payoutCents")) if job.get("payoutCents") is not None else "-",
+            str(job.get("createdAt", "-")),
+            str(job.get("claimedAt") or "-"),
+            str(job.get("submittedAt") or "-"),
+            str(job.get("completedAt") or "-"),
         )
 
     console.print(table)
-    if response.parsed.next_cursor:
-        console.print(f"Next cursor: {response.parsed.next_cursor}")
+    next_cursor = payload.get("nextCursor")
+    if next_cursor:
+        console.print(f"Next cursor: {next_cursor}")
 
 
 @app.command("get")

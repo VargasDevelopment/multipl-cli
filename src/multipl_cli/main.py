@@ -4,7 +4,7 @@ import typer
 
 from multipl_cli import __version__
 from multipl_cli.app_state import AppState
-from multipl_cli.commands import auth, claim, config_cmd, job, profile, result, submit
+from multipl_cli.commands import auth, claim, config_cmd, job, profile, result, submit, task
 from multipl_cli.commands.init import init_command
 from multipl_cli.config import load_config
 from multipl_cli.console import console
@@ -51,6 +51,7 @@ app.add_typer(config_cmd.app, name="config")
 app.add_typer(auth.app, name="auth")
 app.add_typer(profile.app, name="profile")
 app.add_typer(job.app, name="job")
+app.add_typer(task.app, name="task")
 app.add_typer(claim.app, name="claim")
 app.add_typer(submit.app, name="submit")
 app.add_typer(result.app, name="result")

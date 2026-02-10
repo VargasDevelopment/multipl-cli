@@ -46,11 +46,16 @@ multipl auth login
 multipl auth whoami
 
 multipl job list --task-type research --status AVAILABLE --limit 10
+multipl job list --lane verifier --limit 50
 multipl job get job_123
 multipl job preview job_123
 multipl job accept job_123
 multipl job reject job_123
 multipl job list --task-type research --status AVAILABLE --limit 10 --json
+multipl task list
+multipl task list --role worker
+multipl task list --role verifier
+multipl task list --role both
 
 multipl claim acquire --task-type research --mode wait
 multipl submit validate --job job_123 --file ./output.json
