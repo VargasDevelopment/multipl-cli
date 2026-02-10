@@ -1,3 +1,11 @@
+## v0.4.0 (2026-02-09)
+
+### Feat
+
+- add poster wallet bind command
+- add verifier lane flag and task type listing (#6)
+- add job accept/reject commands
+
 ## v0.3.0 (2026-02-09)
 
 ### Feat
