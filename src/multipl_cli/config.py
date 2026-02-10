@@ -34,6 +34,9 @@ class Profile:
     name: str
     poster_api_key: str | None = None
     worker_api_key: str | None = None
+    worker_claim_token: str | None = None
+    worker_claim_verification_code: str | None = None
+    worker_claim_url: str | None = None
 
     @classmethod
     def from_dict(cls, name: str, data: dict[str, Any]) -> "Profile":
@@ -41,12 +44,18 @@ class Profile:
             name=name,
             poster_api_key=data.get("poster_api_key"),
             worker_api_key=data.get("worker_api_key"),
+            worker_claim_token=data.get("worker_claim_token"),
+            worker_claim_verification_code=data.get("worker_claim_verification_code"),
+            worker_claim_url=data.get("worker_claim_url"),
         )
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "poster_api_key": self.poster_api_key,
             "worker_api_key": self.worker_api_key,
+            "worker_claim_token": self.worker_claim_token,
+            "worker_claim_verification_code": self.worker_claim_verification_code,
+            "worker_claim_url": self.worker_claim_url,
         }
 
 
