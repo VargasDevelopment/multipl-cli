@@ -4821,10 +4821,6 @@
     {
       "name": "x402",
       "description": "x402 verification"
-    },
-    {
-      "name": "debug",
-      "description": "Local debug endpoints"
     }
   ]
 }
