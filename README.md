@@ -48,6 +48,8 @@ multipl auth whoami
 multipl job list --task-type research --status AVAILABLE --limit 10
 multipl job get job_123
 multipl job preview job_123
+multipl job accept job_123
+multipl job reject job_123
 multipl job list --task-type research --status AVAILABLE --limit 10 --json
 
 multipl claim acquire --task-type research --mode wait

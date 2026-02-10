@@ -13,6 +13,9 @@ from multipl_cli._client.api.jobs.get_v_1_jobs_job_id import sync_detailed as ge
 from multipl_cli._client.api.jobs.get_v_1_jobs_job_id_preview import (
     sync_detailed as get_job_preview,
 )
+from multipl_cli._client.api.jobs.post_v_1_jobs_job_id_review import (
+    sync_detailed as post_job_review,
+)
 from multipl_cli._client.api.public.get_v1_public_jobs import sync_detailed as list_public_jobs
 from multipl_cli._client.api.public.get_v_1_public_jobs_job_id import (
     sync_detailed as get_public_job,
@@ -20,6 +23,12 @@ from multipl_cli._client.api.public.get_v_1_public_jobs_job_id import (
 from multipl_cli._client.models.post_v1_jobs_body import PostV1JobsBody
 from multipl_cli._client.models.post_v1_jobs_body_acceptance import PostV1JobsBodyAcceptance
 from multipl_cli._client.models.post_v1_jobs_body_input import PostV1JobsBodyInput
+from multipl_cli._client.models.post_v1_jobs_job_id_review_body import (
+    PostV1JobsJobIdReviewBody,
+)
+from multipl_cli._client.models.post_v1_jobs_job_id_review_body_decision import (
+    PostV1JobsJobIdReviewBodyDecision,
+)
 from multipl_cli._client.types import UNSET
 from multipl_cli.app_state import AppState
 from multipl_cli.console import console
@@ -64,6 +73,89 @@ def _parse_response_json(response) -> Any | None:
         return json.loads(response.content.decode("utf-8"))
     except Exception:
         return None
+
+
+def _review_job(
+    state: AppState,
+    *,
+    job_id: str,
+    decision: PostV1JobsJobIdReviewBodyDecision,
+    note: str | None,
+    json_output: bool,
+) -> None:
+    ensure_client_available()
+    profile = state.config.get_active_profile()
+    if not profile.poster_api_key:
+        console.print("[red]Poster API key not configured for active profile.[/red]")
+        raise typer.Exit(code=2)
+
+    client = build_client(state.base_url)
+    body = PostV1JobsJobIdReviewBody(
+        decision=decision,
+        reason=note if note else UNSET,
+    )
+    response = post_job_review(
+        client=client,
+        job_id=job_id,
+        authorization=f"Bearer {profile.poster_api_key}",
+        body=body,
+    )
+
+    if response.status_code == 200:
+        payload = response.parsed.to_dict() if response.parsed is not None else (_parse_response_json(response) or {})
+        if json_output:
+            console.print(payload)
+            return
+
+        job = payload.get("job") if isinstance(payload, dict) else None
+        action = "accepted" if decision == PostV1JobsJobIdReviewBodyDecision.ACCEPT else "rejected"
+        if isinstance(job, dict):
+            state_value = job.get("state")
+            if state_value is not None:
+                console.print(f"Job {action}: {job.get('id', job_id)} (state={state_value})")
+            else:
+                console.print(f"Job {action}: {job.get('id', job_id)}")
+        else:
+            console.print(f"Job {action}: {job_id}")
+        return
+
+    if response.status_code in {401, 403}:
+        console.print("[red]Poster key required or invalid key.[/red]")
+        body_payload = _parse_response_json(response)
+        if body_payload is not None:
+            console.print(body_payload)
+        raise typer.Exit(code=2)
+
+    if response.status_code == 404:
+        console.print("[red]Job not found.[/red]")
+        raise typer.Exit(code=1)
+
+    if response.status_code == 429:
+        retry_after = extract_retry_after_seconds(
+            httpx.Response(
+                status_code=int(response.status_code),
+                headers=response.headers,
+                content=response.content,
+            )
+        )
+        if retry_after is not None:
+            console.print(f"Rate limited. Retry after {retry_after}s.")
+        else:
+            console.print("Rate limited.")
+        raise typer.Exit(code=4)
+
+    if response.status_code in {409, 422}:
+        console.print(f"[red]Review failed (status={response.status_code}).[/red]")
+        body_payload = _parse_response_json(response)
+        if body_payload is not None:
+            console.print(body_payload)
+        raise typer.Exit(code=1)
+
+    console.print(f"[red]Review failed (status={response.status_code}).[/red]")
+    body_payload = _parse_response_json(response)
+    if body_payload is not None:
+        console.print(body_payload)
+    raise typer.Exit(code=2)
 
 
 @app.command("list")
@@ -436,3 +528,43 @@ def create_job(
         except Exception:
             pass
         raise typer.Exit(code=2)
+
+
+@app.command("accept")
+def accept_job(
+    ctx: typer.Context,
+    job_id: str = typer.Argument(..., help="Job ID"),
+    note: str | None = typer.Option(None, "--note", help="Optional review note"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON"),
+) -> None:
+    state = ctx.obj
+    if not isinstance(state, AppState):
+        console.print("[red]Internal error: missing app state[/red]")
+        raise typer.Exit(code=1)
+    _review_job(
+        state,
+        job_id=job_id,
+        decision=PostV1JobsJobIdReviewBodyDecision.ACCEPT,
+        note=note,
+        json_output=json_output,
+    )
+
+
+@app.command("reject")
+def reject_job(
+    ctx: typer.Context,
+    job_id: str = typer.Argument(..., help="Job ID"),
+    note: str | None = typer.Option(None, "--note", help="Optional review note"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON"),
+) -> None:
+    state = ctx.obj
+    if not isinstance(state, AppState):
+        console.print("[red]Internal error: missing app state[/red]")
+        raise typer.Exit(code=1)
+    _review_job(
+        state,
+        job_id=job_id,
+        decision=PostV1JobsJobIdReviewBodyDecision.REJECT,
+        note=note,
+        json_output=json_output,
+    )
