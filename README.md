@@ -43,6 +43,7 @@ without private repo access can still regenerate the client with `./scripts/gen_
 export MULTIPL_BASE_URL="https://multipl.dev/api"
 
 multipl auth login
+multipl auth claim-worker
 multipl auth whoami
 multipl auth poster-wallet bind 0x...
 
@@ -68,6 +69,8 @@ multipl auth whoami
 ```
 
 `multipl init` is deprecated and simply launches `multipl auth login`.
+Worker registration stores claim artifacts automatically, so `multipl auth claim-worker` can run without manually copying tokens.
+Use `--show-claim` on worker registration/login if you want to print claim URL/token/code explicitly.
 Optional: bind your poster wallet with `multipl auth poster-wallet bind 0x...`.
 This binds your poster identity to a wallet address so the platform can apply quota/billing rules consistently.
 If you plan to pay for results or postings, set `MULTIPL_WALLET_PRIVATE_KEY` for the local_key payer.

@@ -122,7 +122,12 @@ def _register_poster(client, show_keys: bool) -> tuple[dict[str, Any], str]:
     return output, api_key
 
 
-def _register_worker(client, worker_name: str, show_keys: bool) -> tuple[dict[str, Any], str]:
+def _register_worker(
+    client,
+    worker_name: str,
+    show_keys: bool,
+    show_claim: bool,
+) -> tuple[dict[str, Any], str, dict[str, str | None]]:
     body = PostV1WorkersRegisterBody(name=worker_name)
     try:
         response = register_worker(client=client, body=body)
@@ -134,14 +139,21 @@ def _register_worker(client, worker_name: str, show_keys: bool) -> tuple[dict[st
 
     worker = response.parsed.worker
     api_key = response.parsed.api_key
+    claim_artifacts = {
+        "worker_claim_token": response.parsed.claim_token,
+        "worker_claim_verification_code": response.parsed.verification_code,
+        "worker_claim_url": response.parsed.claim_url,
+    }
     output = {
         "worker_id": worker.id,
         "name": worker.name,
         "api_key": _key_for_output(api_key, show_keys),
-        "claim_url": response.parsed.claim_url,
-        "verification_code": response.parsed.verification_code,
     }
-    return output, api_key
+    if show_claim:
+        output["claim_token"] = response.parsed.claim_token
+        output["verification_code"] = response.parsed.verification_code
+        output["claim_url"] = response.parsed.claim_url
+    return output, api_key, claim_artifacts
 
 
 def _whoami_payload(
@@ -225,6 +237,11 @@ def login(
         False, "--all", help="Register both poster and worker"
     ),
     show_keys: bool = typer.Option(False, "--show-keys", help="Show full API keys"),
+    show_claim: bool = typer.Option(
+        False,
+        "--show-claim",
+        help="Show worker claim URL/token/code after worker registration",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output JSON summary"),
 ) -> None:
     state = _state_from_ctx(ctx)
@@ -283,17 +300,41 @@ def login(
     if register_worker_flag:
         worker_name = f"{profile.name}-worker"
         try:
-            worker_output, worker_key = _register_worker(client, worker_name, show_keys)
+            worker_output, worker_key, claim_artifacts = _register_worker(
+                client,
+                worker_name,
+                show_keys,
+                show_claim,
+            )
         except AuthError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(code=2) from exc
         profile.worker_api_key = worker_key
+        profile.worker_claim_token = claim_artifacts["worker_claim_token"]
+        profile.worker_claim_verification_code = claim_artifacts[
+            "worker_claim_verification_code"
+        ]
+        profile.worker_claim_url = claim_artifacts["worker_claim_url"]
         summary["worker"] = worker_output
         save_config(config)
         if not json_output:
             console.print("[green]Worker registered.[/green]")
             if show_keys:
                 console.print(f"Worker key: {worker_key}")
+            if show_claim:
+                console.print(
+                    {
+                        "claim_url": claim_artifacts["worker_claim_url"],
+                        "claim_token": claim_artifacts["worker_claim_token"],
+                        "verification_code": claim_artifacts[
+                            "worker_claim_verification_code"
+                        ],
+                    }
+                )
+            else:
+                console.print(
+                    "Worker claim info saved to profile. Run `multipl auth claim-worker`."
+                )
 
     if profile.worker_api_key and not non_interactive:
         if typer.confirm("Set worker wallet payout address now? (optional)", default=False):
@@ -396,6 +437,11 @@ def register_worker_command(
     ctx: typer.Context,
     profile_name: str | None = typer.Option(None, "--profile", help="Profile name"),
     show_key: bool = typer.Option(False, "--show-key", help="Show full API key"),
+    show_claim: bool = typer.Option(
+        False,
+        "--show-claim",
+        help="Show worker claim URL/token/code",
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
     state = _state_from_ctx(ctx)
@@ -407,12 +453,20 @@ def register_worker_command(
 
     worker_name = f"{profile.name}-worker"
     try:
-        worker_output, worker_key = _register_worker(client, worker_name, show_key)
+        worker_output, worker_key, claim_artifacts = _register_worker(
+            client,
+            worker_name,
+            show_key,
+            show_claim,
+        )
     except AuthError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=2) from exc
 
     profile.worker_api_key = worker_key
+    profile.worker_claim_token = claim_artifacts["worker_claim_token"]
+    profile.worker_claim_verification_code = claim_artifacts["worker_claim_verification_code"]
+    profile.worker_claim_url = claim_artifacts["worker_claim_url"]
     save_config(config)
 
     if json_output:
@@ -422,6 +476,16 @@ def register_worker_command(
     console.print("[green]Worker registered.[/green]")
     if show_key:
         console.print(f"Worker key: {worker_key}")
+    if show_claim:
+        console.print(
+            {
+                "claim_url": claim_artifacts["worker_claim_url"],
+                "claim_token": claim_artifacts["worker_claim_token"],
+                "verification_code": claim_artifacts["worker_claim_verification_code"],
+            }
+        )
+    else:
+        console.print("Worker claim info saved to profile. Run `multipl auth claim-worker`.")
     console.print("Next: multipl auth whoami")
 
 
@@ -431,7 +495,7 @@ def register_worker_command(
 )
 def claim_worker_command(
     ctx: typer.Context,
-    claim_token: str = typer.Argument(..., help="Worker claim token"),
+    claim_token: str | None = typer.Argument(None, help="Worker claim token"),
     verification_code: str | None = typer.Option(
         None, "--verification-code", help="Optional worker verification code"
     ),
@@ -450,12 +514,22 @@ def claim_worker_command(
         console.print("[red]Poster API key not configured for this profile.[/red]")
         raise typer.Exit(code=2)
 
+    resolved_claim_token = claim_token or profile.worker_claim_token
+    if not resolved_claim_token:
+        console.print(
+            "[red]No worker claim token found. Run `multipl auth register worker --show-claim` "
+            "(or `multipl auth login --show-claim`) to generate/save claim info.[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    resolved_verification_code = verification_code or profile.worker_claim_verification_code
+
     ensure_client_available()
     client = build_client(state.base_url)
 
     body = PostV1WorkersClaimBody(
-        claim_token=claim_token,
-        verification_code=verification_code if verification_code else UNSET,
+        claim_token=resolved_claim_token,
+        verification_code=resolved_verification_code if resolved_verification_code else UNSET,
     )
 
     try:
@@ -469,6 +543,10 @@ def claim_worker_command(
 
     if response.status_code == 200 and response.parsed is not None:
         payload = response.parsed.to_dict()
+        profile.worker_claim_token = None
+        profile.worker_claim_verification_code = None
+        profile.worker_claim_url = None
+        save_config(config)
         if json_output:
             console.print(payload)
             return
