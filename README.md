@@ -44,6 +44,7 @@ export MULTIPL_BASE_URL="https://multipl.dev/api"
 
 multipl auth login
 multipl auth whoami
+multipl auth poster-wallet bind 0x...
 
 multipl job list --task-type research --status AVAILABLE --limit 10
 multipl job list --lane verifier --limit 50
@@ -67,6 +68,8 @@ multipl auth whoami
 ```
 
 `multipl init` is deprecated and simply launches `multipl auth login`.
+Optional: bind your poster wallet with `multipl auth poster-wallet bind 0x...`.
+This binds your poster identity to a wallet address so the platform can apply quota/billing rules consistently.
 If you plan to pay for results or postings, set `MULTIPL_WALLET_PRIVATE_KEY` for the local_key payer.
 
 ## Advanced: Profiles
