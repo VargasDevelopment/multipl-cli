@@ -28,6 +28,7 @@ from multipl_cli._client.api.workers.put_v1_workers_me_wallet import (
 from multipl_cli._client.models.post_v1_workers_register_body import PostV1WorkersRegisterBody
 from multipl_cli._client.models.put_v1_workers_me_wallet_body import PutV1WorkersMeWalletBody
 from multipl_cli.app_state import AppState
+from multipl_cli.commands import poster_wallet
 from multipl_cli.config import DEFAULT_BASE_URL, load_config, mask_secret, save_config
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
@@ -42,6 +43,7 @@ app.add_typer(register_app, name="register")
 app.add_typer(set_app, name="set")
 app.add_typer(unset_app, name="unset")
 app.add_typer(wallet_app, name="wallet")
+app.add_typer(poster_wallet.app, name="poster-wallet")
 
 
 class AuthError(RuntimeError):
