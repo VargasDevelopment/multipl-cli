@@ -19,19 +19,25 @@ from multipl_cli._client.api.posters.post_v1_posters_register import (
 from multipl_cli._client.api.workers.get_v1_workers_me import (
     sync_detailed as get_worker_me,
 )
+from multipl_cli._client.api.workers.post_v1_workers_claim import (
+    sync_detailed as claim_worker_api,
+)
 from multipl_cli._client.api.workers.post_v1_workers_register import (
     sync_detailed as register_worker,
 )
 from multipl_cli._client.api.workers.put_v1_workers_me_wallet import (
     sync_detailed as set_worker_wallet,
 )
+from multipl_cli._client.models.post_v1_workers_claim_body import PostV1WorkersClaimBody
 from multipl_cli._client.models.post_v1_workers_register_body import PostV1WorkersRegisterBody
 from multipl_cli._client.models.put_v1_workers_me_wallet_body import PutV1WorkersMeWalletBody
+from multipl_cli._client.types import UNSET
 from multipl_cli.app_state import AppState
 from multipl_cli.commands import poster_wallet
 from multipl_cli.config import DEFAULT_BASE_URL, load_config, mask_secret, save_config
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
+from multipl_cli.polling import extract_retry_after_seconds
 
 app = typer.Typer(no_args_is_help=True)
 register_app = typer.Typer(no_args_is_help=True)
@@ -86,6 +92,16 @@ def _render_kv_table(title: str, data: dict[str, Any]) -> None:
 def _raise_network_error(exc: Exception) -> None:
     console.print(f"[red]Network error: {exc}[/red]")
     raise typer.Exit(code=2)
+
+
+def _parse_response_json(response) -> dict[str, Any] | None:
+    try:
+        payload = response.json()
+    except Exception:
+        return None
+    if isinstance(payload, dict):
+        return payload
+    return None
 
 
 def _register_poster(client, show_keys: bool) -> tuple[dict[str, Any], str]:
@@ -407,6 +423,122 @@ def register_worker_command(
     if show_key:
         console.print(f"Worker key: {worker_key}")
     console.print("Next: multipl auth whoami")
+
+
+@app.command(
+    "claim-worker",
+    help="Claim a worker agent under the current poster profile (links poster ↔ worker for convenience flows).",
+)
+def claim_worker_command(
+    ctx: typer.Context,
+    claim_token: str = typer.Argument(..., help="Worker claim token"),
+    verification_code: str | None = typer.Option(
+        None, "--verification-code", help="Optional worker verification code"
+    ),
+    profile_name: str | None = typer.Option(None, "--profile", help="Profile name"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON"),
+) -> None:
+    state = _state_from_ctx(ctx)
+    config = state.config
+
+    if profile_name and profile_name not in config.profiles:
+        console.print(f"[red]Profile '{profile_name}' not found.[/red]")
+        raise typer.Exit(code=1)
+    profile = config.ensure_profile(profile_name or config.active_profile)
+
+    if not profile.poster_api_key:
+        console.print("[red]Poster API key not configured for this profile.[/red]")
+        raise typer.Exit(code=2)
+
+    ensure_client_available()
+    client = build_client(state.base_url)
+
+    body = PostV1WorkersClaimBody(
+        claim_token=claim_token,
+        verification_code=verification_code if verification_code else UNSET,
+    )
+
+    try:
+        response = claim_worker_api(
+            client=client,
+            authorization=f"Bearer {profile.poster_api_key}",
+            body=body,
+        )
+    except httpx.HTTPError as exc:
+        _raise_network_error(exc)
+
+    if response.status_code == 200 and response.parsed is not None:
+        payload = response.parsed.to_dict()
+        if json_output:
+            console.print(payload)
+            return
+        worker = payload.get("worker", {})
+        claimed_by = (
+            worker.get("claimedByPosterId")
+            if isinstance(worker, dict)
+            else None
+        )
+        console.print("[green]Worker claimed under poster profile.[/green]")
+        console.print(
+            {
+                "workerId": worker.get("id") if isinstance(worker, dict) else None,
+                "workerName": worker.get("name") if isinstance(worker, dict) else None,
+                "isClaimed": worker.get("isClaimed") if isinstance(worker, dict) else None,
+                "claimedByPosterId": claimed_by,
+            }
+        )
+        return
+
+    if response.status_code == 429:
+        retry_after = extract_retry_after_seconds(
+            httpx.Response(
+                status_code=int(response.status_code),
+                headers=response.headers,
+                content=response.content,
+            )
+        )
+        if retry_after is not None:
+            console.print(f"Rate limited. Retry after {retry_after}s.")
+        else:
+            console.print("Rate limited.")
+        raise typer.Exit(code=4)
+
+    payload = _parse_response_json(response)
+
+    if response.status_code in {401, 403}:
+        console.print("[red]Poster key required or invalid key.[/red]")
+        if payload is not None:
+            console.print(payload)
+        raise typer.Exit(code=2)
+
+    if response.status_code == 400:
+        console.print("[red]Worker claim verification failed.[/red]")
+        if payload is not None:
+            console.print(payload)
+        raise typer.Exit(code=1)
+
+    if response.status_code == 404:
+        console.print("[red]Worker claim token not found.[/red]")
+        if payload is not None:
+            console.print(payload)
+        raise typer.Exit(code=1)
+
+    if response.status_code == 409:
+        message = None
+        if payload is not None and isinstance(payload.get("error"), str):
+            message = payload["error"]
+        if message:
+            console.print(f"[yellow]{message}[/yellow]")
+        else:
+            console.print("[yellow]Worker already claimed by another poster.[/yellow]")
+        if payload is not None:
+            console.print(payload)
+        raise typer.Exit(code=1)
+
+    console.print(f"[red]Worker claim failed (status={response.status_code}).[/red]")
+    if payload is not None:
+        console.print(payload)
+    raise typer.Exit(code=2)
 
 
 @app.command("whoami")
