@@ -99,6 +99,7 @@ def test_claim_worker_missing_token_exits_1() -> None:
 def test_claim_worker_success_json(monkeypatch) -> None:
     monkeypatch.setattr(auth, "ensure_client_available", lambda: None)
     monkeypatch.setattr(auth, "build_client", lambda _base_url: object())
+    monkeypatch.setattr(auth, "save_config", lambda _config: None)
 
     calls: list[dict] = []
 
