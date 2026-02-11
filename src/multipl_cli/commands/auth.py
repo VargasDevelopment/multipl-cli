@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 import typer
@@ -51,6 +52,9 @@ app.add_typer(unset_app, name="unset")
 app.add_typer(wallet_app, name="wallet")
 app.add_typer(poster_wallet.app, name="poster-wallet")
 
+BASE_NETWORK = "eip155:8453"
+LOCAL_NETWORK = "local"
+
 
 class AuthError(RuntimeError):
     pass
@@ -72,6 +76,32 @@ def _resolve_base_url(config_base_url: str | None, override: str | None) -> str:
     if config_base_url:
         return config_base_url
     return DEFAULT_BASE_URL
+
+
+def _is_local_base_url(base_url: str) -> bool:
+    normalized_base_url = base_url.strip()
+    if "://" not in normalized_base_url:
+        normalized_base_url = f"http://{normalized_base_url}"
+    parsed = urlparse(normalized_base_url)
+    hostname = (parsed.hostname or "").lower()
+    return hostname in {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+
+
+def _resolve_worker_wallet_network(
+    *,
+    base_url: str,
+    requested_network: str | None = None,
+) -> str:
+    if requested_network is not None and requested_network.strip():
+        return requested_network.strip()
+
+    env_network = (os.environ.get("MULTIPL_WORKER_WALLET_NETWORK") or "").strip()
+    if env_network:
+        return env_network
+
+    if _is_local_base_url(base_url):
+        return LOCAL_NETWORK
+    return BASE_NETWORK
 
 
 def _key_for_output(key: str, show_keys: bool) -> str:
@@ -342,17 +372,22 @@ def login(
             if not (address.startswith("0x") and len(address) == 42):
                 console.print("[red]Wallet address must be a 0x-prefixed 42-char string.[/red]")
                 raise typer.Exit(code=1)
+            resolved_network = _resolve_worker_wallet_network(base_url=effective_base_url)
             try:
                 wallet_response = set_worker_wallet(
                     client=client,
                     authorization=f"Bearer {profile.worker_api_key}",
-                    body=PutV1WorkersMeWalletBody(address=address),
+                    body=PutV1WorkersMeWalletBody(address=address, network=resolved_network),
                 )
             except httpx.HTTPError as exc:
                 _raise_network_error(exc)
             if wallet_response.status_code == 200 and wallet_response.parsed is not None:
                 wallet = wallet_response.parsed.wallet
                 summary["wallet"] = wallet.to_dict()
+                if wallet.network != resolved_network and not json_output:
+                    console.print(
+                        "[yellow]Server stored a different wallet network than requested.[/yellow]"
+                    )
                 if not json_output:
                     console.print("[green]Worker wallet updated.[/green]")
                     _render_kv_table(
@@ -691,6 +726,11 @@ def unset_worker_key(
 def wallet_set_command(
     ctx: typer.Context,
     address: str = typer.Argument(..., help="0x wallet address"),
+    network: str | None = typer.Option(
+        None,
+        "--network",
+        help="Wallet network override (default auto: Base except localhost targets)",
+    ),
     profile_name: str | None = typer.Option(None, "--profile", help="Profile name"),
     json_output: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
@@ -708,12 +748,16 @@ def wallet_set_command(
 
     ensure_client_available()
     client = build_client(state.base_url)
+    resolved_network = _resolve_worker_wallet_network(
+        base_url=state.base_url,
+        requested_network=network,
+    )
 
     try:
         response = set_worker_wallet(
             client=client,
             authorization=f"Bearer {profile.worker_api_key}",
-            body=PutV1WorkersMeWalletBody(address=address),
+            body=PutV1WorkersMeWalletBody(address=address, network=resolved_network),
         )
     except httpx.HTTPError as exc:
         _raise_network_error(exc)
@@ -723,6 +767,8 @@ def wallet_set_command(
         raise typer.Exit(code=2)
 
     wallet = response.parsed.wallet
+    if wallet.network != resolved_network and not json_output:
+        console.print("[yellow]Server stored a different wallet network than requested.[/yellow]")
     if json_output:
         console.print({"wallet": wallet.to_dict()})
         return

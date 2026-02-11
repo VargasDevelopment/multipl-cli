@@ -5,7 +5,6 @@ import json
 import typer
 from rich.table import Table
 
-from multipl_cli._client.models.post_v1_claims_acquire_body import PostV1ClaimsAcquireBody
 from multipl_cli._client.models.post_v1_claims_acquire_response_200 import (
     PostV1ClaimsAcquireResponse200,
 )
@@ -70,7 +69,8 @@ def _render_rate_limit_notice(payload: dict, retry_after: int | None, *, is_retr
 @app.command("acquire")
 def acquire(
     ctx: typer.Context,
-    task_type: str = typer.Option(..., "--task-type", help="Task type to claim"),
+    task_type: str | None = typer.Option(None, "--task-type", help="Task type to claim"),
+    job_id: str | None = typer.Option(None, "--job", help="Claim a specific job ID"),
     mode: str = typer.Option(
         "single",
         "--mode",
@@ -94,7 +94,11 @@ def acquire(
     saw_success = False
 
     def request_once():
-        body = PostV1ClaimsAcquireBody(task_type=task_type)
+        body: dict[str, str] = {}
+        if task_type:
+            body["taskType"] = task_type
+        if job_id:
+            body["jobId"] = job_id
         return client.get_httpx_client().request(
             "post",
             "/v1/claims/acquire",
@@ -102,7 +106,7 @@ def acquire(
                 "authorization": f"Bearer {profile.worker_api_key}",
                 "Content-Type": "application/json",
             },
-            json=body.to_dict(),
+            json=body,
         )
 
     def handle_success(response):
@@ -147,6 +151,12 @@ def acquire(
     mode = mode.lower()
     if mode not in {"single", "wait", "drain"}:
         console.print("[red]Invalid mode. Use single, wait, or drain.[/red]")
+        raise typer.Exit(code=1)
+    if bool(task_type) == bool(job_id):
+        console.print("[red]Provide exactly one of --task-type or --job.[/red]")
+        raise typer.Exit(code=1)
+    if job_id and mode != "single":
+        console.print("[red]--job only supports --mode single.[/red]")
         raise typer.Exit(code=1)
 
     if mode == "single":

@@ -14,6 +14,9 @@ from multipl_cli._client.api.jobs.get_v_1_jobs_job_id import sync_detailed as ge
 from multipl_cli._client.api.jobs.get_v_1_jobs_job_id_preview import (
     sync_detailed as get_job_preview,
 )
+from multipl_cli._client.api.jobs.get_v_1_jobs_job_id_stages import (
+    sync_detailed as get_job_stages,
+)
 from multipl_cli._client.api.jobs.post_v_1_jobs_job_id_review import (
     sync_detailed as post_job_review,
 )
@@ -22,9 +25,6 @@ from multipl_cli._client.api.public.get_v_1_public_jobs_job_id import (
     sync_detailed as get_public_job,
 )
 from multipl_cli._client.models.get_v1_jobs_lane import GetV1JobsLane
-from multipl_cli._client.models.post_v1_jobs_body import PostV1JobsBody
-from multipl_cli._client.models.post_v1_jobs_body_acceptance import PostV1JobsBodyAcceptance
-from multipl_cli._client.models.post_v1_jobs_body_input import PostV1JobsBodyInput
 from multipl_cli._client.models.post_v1_jobs_job_id_review_body import (
     PostV1JobsJobIdReviewBody,
 )
@@ -43,6 +43,16 @@ from multipl_cli.x402.payer_manual import ManualPayer
 from multipl_cli.x402.proof import ProofError, load_proof_from_file, parse_proof_value
 
 app = typer.Typer(no_args_is_help=True)
+
+CREATE_JOB_REQUEST_HINT_KEYS = {
+    "stages",
+    "taskType",
+    "payoutCents",
+    "deadlineSeconds",
+    "jobTtlSeconds",
+    "requestedModel",
+    "estimatedTokens",
+}
 
 
 def _load_json(path: Path) -> dict:
@@ -75,6 +85,47 @@ def _parse_response_json(response) -> Any | None:
         return json.loads(response.content.decode("utf-8"))
     except Exception:
         return None
+
+
+def _looks_like_create_job_request(payload: dict[str, Any]) -> bool:
+    return any(key in payload for key in CREATE_JOB_REQUEST_HINT_KEYS)
+
+
+def _apply_create_job_overrides(
+    request_payload: dict[str, Any],
+    *,
+    task_type: str | None,
+    acceptance_payload: dict[str, Any] | None,
+    requested_model: str | None,
+    estimated_tokens: int | None,
+    deadline_seconds: int | None,
+    payout_cents: int | None,
+    job_ttl_seconds: int | None,
+    json_output: bool,
+) -> None:
+    if task_type is not None:
+        existing_task_type = request_payload.get("taskType")
+        if (
+            isinstance(existing_task_type, str)
+            and existing_task_type.strip()
+            and existing_task_type != task_type
+            and not json_output
+        ):
+            console.print("[yellow]Overriding file taskType with --task-type.[/yellow]")
+        request_payload["taskType"] = task_type
+
+    if acceptance_payload is not None:
+        request_payload["acceptance"] = acceptance_payload
+    if requested_model is not None:
+        request_payload["requestedModel"] = requested_model
+    if estimated_tokens is not None:
+        request_payload["estimatedTokens"] = estimated_tokens
+    if deadline_seconds is not None:
+        request_payload["deadlineSeconds"] = deadline_seconds
+    if payout_cents is not None:
+        request_payload["payoutCents"] = payout_cents
+    if job_ttl_seconds is not None:
+        request_payload["jobTtlSeconds"] = job_ttl_seconds
 
 
 def _review_job(
@@ -417,11 +468,118 @@ def preview_job(
     raise typer.Exit(code=2)
 
 
+@app.command("stages")
+def get_job_stages_cmd(
+    ctx: typer.Context,
+    job_id: str = typer.Argument(..., help="Job ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output JSON"),
+) -> None:
+    state = ctx.obj
+    if not isinstance(state, AppState):
+        console.print("[red]Internal error: missing app state[/red]")
+        raise typer.Exit(code=1)
+
+    ensure_client_available()
+    profile = state.config.get_active_profile()
+    if not profile.poster_api_key:
+        console.print("[red]Poster API key not configured for active profile.[/red]")
+        raise typer.Exit(code=2)
+
+    client = build_client(state.base_url)
+    response = get_job_stages(
+        client=client,
+        job_id=job_id,
+        authorization=f"Bearer {profile.poster_api_key}",
+    )
+
+    if response.status_code == 200:
+        payload = response.parsed.to_dict() if response.parsed is not None else (_parse_response_json(response) or {})
+        if json_output:
+            console.print(payload)
+            return
+
+        if not isinstance(payload, dict):
+            console.print("[red]Invalid stages response payload.[/red]")
+            raise typer.Exit(code=2)
+        stages = payload.get("stages")
+        if not isinstance(stages, list):
+            console.print("[red]Invalid stages response payload.[/red]")
+            raise typer.Exit(code=2)
+
+        console.print(f"rootJobId: {payload.get('rootJobId')}")
+        table = Table(title=f"Stages for {job_id}")
+        table.add_column("#")
+        table.add_column("Stage")
+        table.add_column("State")
+        table.add_column("Visibility")
+        table.add_column("Assignment")
+        table.add_column("Job ID")
+        table.add_column("Reserved Worker")
+
+        for stage in stages:
+            if not isinstance(stage, dict):
+                continue
+            table.add_row(
+                str(stage.get("stageIndex", "-")),
+                str(stage.get("stageId", "-")),
+                str(stage.get("state", "-")),
+                str(stage.get("visibility", "-")),
+                str(stage.get("assignmentMode") or "-"),
+                str(stage.get("jobId") or "-"),
+                str(stage.get("reservedWorkerId") or "-"),
+            )
+        console.print(table)
+        return
+
+    if response.status_code in {401, 403}:
+        console.print("[red]Unauthorized (poster key missing/invalid).[/red]")
+        body = _parse_response_json(response)
+        if body is not None:
+            console.print(body)
+        raise typer.Exit(code=2)
+
+    if response.status_code == 404:
+        console.print("[red]Job not found or not accessible.[/red]")
+        raise typer.Exit(code=2)
+
+    if response.status_code == 429:
+        retry_after = extract_retry_after_seconds(
+            httpx.Response(
+                status_code=int(response.status_code),
+                headers=response.headers,
+                content=response.content,
+            )
+        )
+        if retry_after is not None:
+            console.print(f"Rate limited. Retry after {retry_after}s.")
+        else:
+            console.print("Rate limited.")
+        raise typer.Exit(code=4)
+
+    console.print(f"[red]Failed to fetch stages (status={response.status_code}).[/red]")
+    body = _parse_response_json(response)
+    if body is not None:
+        console.print(body)
+    raise typer.Exit(code=2)
+
+
 @app.command("create")
 def create_job(
     ctx: typer.Context,
-    task_type: str = typer.Option(..., "--task-type", help="Task type"),
-    input_file: Path = typer.Option(..., "--input-file", exists=True, dir_okay=False),
+    task_type: str | None = typer.Option(None, "--task-type", help="Task type override"),
+    input_file: Path = typer.Option(
+        ...,
+        "--input-file",
+        exists=True,
+        dir_okay=False,
+        help="Legacy input JSON or full create request JSON",
+    ),
+    request_file: bool = typer.Option(
+        False,
+        "--request-file",
+        "--raw",
+        help="Treat --input-file as full POST /v1/jobs request JSON",
+    ),
     acceptance_file: Path | None = typer.Option(
         None, "--acceptance-file", exists=True, dir_okay=False
     ),
@@ -474,23 +632,47 @@ def create_job(
         payer = ManualPayer(proof=None)
 
     input_payload = _load_json(input_file)
-    input_model = PostV1JobsBodyInput.from_dict(input_payload)
+    acceptance_payload = _load_json(acceptance_file) if acceptance_file else None
 
-    acceptance_model = UNSET
-    if acceptance_file:
-        acceptance_payload = _load_json(acceptance_file)
-        acceptance_model = PostV1JobsBodyAcceptance.from_dict(acceptance_payload)
+    full_request_mode = request_file or _looks_like_create_job_request(input_payload)
+    if full_request_mode:
+        request_payload = dict(input_payload)
+        if "stages" in input_payload and not request_file and not json_output:
+            console.print(
+                "[yellow]Detected top-level stages in --input-file; sending full create request.[/yellow]"
+            )
+    else:
+        if task_type is None:
+            console.print(
+                "[red]--task-type is required when --input-file is legacy input-only JSON.[/red]"
+            )
+            raise typer.Exit(code=1)
+        request_payload = {
+            "taskType": task_type,
+            "input": input_payload,
+        }
 
-    body = PostV1JobsBody(
+    _apply_create_job_overrides(
+        request_payload,
         task_type=task_type,
-        input_=input_model,
-        acceptance=acceptance_model,
-        requested_model=requested_model if requested_model is not None else UNSET,
-        estimated_tokens=estimated_tokens if estimated_tokens is not None else UNSET,
-        deadline_seconds=deadline_seconds if deadline_seconds is not None else UNSET,
-        payout_cents=payout_cents if payout_cents is not None else UNSET,
-        job_ttl_seconds=job_ttl_seconds if job_ttl_seconds is not None else UNSET,
+        acceptance_payload=acceptance_payload,
+        requested_model=requested_model,
+        estimated_tokens=estimated_tokens,
+        deadline_seconds=deadline_seconds,
+        payout_cents=payout_cents,
+        job_ttl_seconds=job_ttl_seconds,
+        json_output=json_output,
     )
+
+    task_type_in_payload = request_payload.get("taskType")
+    if not isinstance(task_type_in_payload, str) or not task_type_in_payload.strip():
+        console.print("[red]Create request must include taskType (file or --task-type).[/red]")
+        raise typer.Exit(code=1)
+
+    input_in_payload = request_payload.get("input")
+    if not isinstance(input_in_payload, dict):
+        console.print("[red]Create request must include an object input payload.[/red]")
+        raise typer.Exit(code=1)
 
     if not idempotency_key:
         idempotency_key = str(uuid.uuid4())
@@ -511,7 +693,7 @@ def create_job(
             "post",
             "/v1/jobs",
             headers=headers,
-            json=body.to_dict(),
+            json=request_payload,
         )
 
     attempts = 0

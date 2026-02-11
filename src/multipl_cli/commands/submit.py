@@ -3,13 +3,11 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.table import Table
 
-from multipl_cli._client.models.get_v1_public_jobs_job_id_response_200 import (
-    GetV1PublicJobsJobIdResponse200,
-)
 from multipl_cli._client.models.post_v1_claims_claim_id_submit_body import (
     PostV1ClaimsClaimIdSubmitBody,
 )
@@ -34,8 +32,24 @@ def _fetch_acceptance_contract(client, job_id: str):
     if response.status_code != 200:
         console.print(f"[red]Failed to fetch job (status={response.status_code}).[/red]")
         raise typer.Exit(code=2)
-    parsed = GetV1PublicJobsJobIdResponse200.from_dict(response.json())
-    return parsed.job.acceptance_contract
+    payload = response.json()
+    if not isinstance(payload, dict):
+        console.print("[red]Invalid public job response payload.[/red]")
+        raise typer.Exit(code=2)
+    job_payload = payload.get("job")
+    if not isinstance(job_payload, dict):
+        console.print("[red]Invalid public job response payload.[/red]")
+        raise typer.Exit(code=2)
+    acceptance_contract = job_payload.get("acceptanceContract")
+    return acceptance_contract
+
+
+def _build_validation_report(
+    *,
+    acceptance_contract: Any,
+    payload: Any,
+):
+    return validate_acceptance(acceptance_contract, payload)
 
 
 def _render_report(report):
@@ -50,6 +64,52 @@ def _render_report(report):
             str(check.get("reason") or ""),
         )
     console.print(table)
+
+
+def _failed_checks(acceptance_report: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(acceptance_report, dict):
+        return []
+    checks = acceptance_report.get("checks")
+    if not isinstance(checks, list):
+        return []
+    failures: list[dict[str, Any]] = []
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        if check.get("passed") is False:
+            failures.append(check)
+    return failures
+
+
+def _print_failed_acceptance(acceptance_report: dict[str, Any] | None) -> None:
+    console.print("[bold red]FAILED ACCEPTANCE[/bold red]")
+    failures = _failed_checks(acceptance_report)
+    if failures:
+        for check in failures[:5]:
+            check_name = str(check.get("name") or "check")
+            reason = str(check.get("reason") or "failed")
+            console.print(f"[red]- {check_name}: {reason}[/red]")
+    else:
+        console.print("[red]- Acceptance checks failed on the server.[/red]")
+    console.print(
+        "[yellow]Next step: edit the payload and resubmit; you can reuse the same job while the lease is valid.[/yellow]"
+    )
+
+
+def _response_json(response) -> dict[str, Any]:
+    try:
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _cached_job_for_claim(cache: ClaimsCache, profile_name: str, claim_id: str) -> str | None:
+    profile_claims = cache.claims_by_profile.get(profile_name, {})
+    for cached_job_id, cached_claim_id in profile_claims.items():
+        if cached_claim_id == claim_id:
+            return cached_job_id
+    return None
 
 
 @app.command("validate")
@@ -69,7 +129,10 @@ def validate(
 
     payload = _load_json(file)
     acceptance_contract = _fetch_acceptance_contract(client, job_id)
-    report = validate_acceptance(acceptance_contract, payload)
+    report = _build_validation_report(
+        acceptance_contract=acceptance_contract,
+        payload=payload,
+    )
     if json_output:
         console.print(asdict(report))
     else:
@@ -104,7 +167,10 @@ def send(
 
     if not force:
         acceptance_contract = _fetch_acceptance_contract(client, job_id)
-        report = validate_acceptance(acceptance_contract, payload)
+        report = _build_validation_report(
+            acceptance_contract=acceptance_contract,
+            payload=payload,
+        )
         if json_output:
             console.print(asdict(report))
         else:
@@ -114,9 +180,16 @@ def send(
                 console.print("[red]Validation failed. Use --force to override.[/red]")
             raise typer.Exit(code=1)
 
+    cache = ClaimsCache.load()
+    profile_claims = cache.claims_by_profile.get(state.profile_name, {})
+    other_cached_jobs = [cached_job_id for cached_job_id in profile_claims if cached_job_id != job_id]
+    if other_cached_jobs and not json_output:
+        console.print(
+            f"[yellow]Warning: you also have cached claims for other jobs: {', '.join(other_cached_jobs[:3])}.[/yellow]"
+        )
+
     resolved_claim_id = claim_id
     if not resolved_claim_id:
-        cache = ClaimsCache.load()
         resolved_claim_id = cache.get_claim(state.profile_name, job_id)
     if not resolved_claim_id:
         console.print(
@@ -124,7 +197,18 @@ def send(
         )
         raise typer.Exit(code=1)
 
+    if claim_id:
+        cached_job_id = _cached_job_for_claim(cache, state.profile_name, resolved_claim_id)
+        if cached_job_id and cached_job_id != job_id:
+            console.print(
+                f"[red]Claim {resolved_claim_id} is cached for job {cached_job_id}, not {job_id}.[/red]"
+            )
+            console.print("[yellow]Use a matching claim or run `multipl claim acquire --job <jobId>`.[/yellow]")
+            raise typer.Exit(code=1)
+
     body = PostV1ClaimsClaimIdSubmitBody(output=payload)
+    submit_payload = body.to_dict()
+    submit_payload["expectedJobId"] = job_id
     response = client.get_httpx_client().request(
         "post",
         f"/v1/claims/{resolved_claim_id}/submit",
@@ -132,12 +216,32 @@ def send(
             "authorization": f"Bearer {profile.worker_api_key}",
             "Content-Type": "application/json",
         },
-        json=body.to_dict(),
+        json=submit_payload,
     )
 
     if response.status_code != 200:
+        error_payload = _response_json(response)
+        if response.status_code == 409 and error_payload.get("code") == "claim_job_mismatch":
+            console.print(
+                f"[red]Claim/job mismatch: {error_payload.get('message') or 'claim does not match --job'}[/red]"
+            )
+            raise typer.Exit(code=1)
         console.print(f"[red]Submit failed (status={response.status_code}).[/red]")
         raise typer.Exit(code=2)
+
+    response_payload = _response_json(response)
+    acceptance_report = response_payload.get("acceptanceReport")
+    acceptance_status = (
+        acceptance_report.get("status")
+        if isinstance(acceptance_report, dict)
+        else None
+    )
+    if acceptance_status in {"fail", "error"}:
+        if json_output:
+            console.print(response_payload)
+        else:
+            _print_failed_acceptance(acceptance_report if isinstance(acceptance_report, dict) else None)
+        raise typer.Exit(code=1)
 
     if json_output:
         try:
@@ -145,4 +249,4 @@ def send(
         except Exception:
             console.print({"ok": True})
     else:
-        console.print("[green]Submission sent.[/green]")
+        console.print("[green]Submission accepted (PASS).[/green]")

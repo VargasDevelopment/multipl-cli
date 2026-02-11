@@ -64,7 +64,8 @@ def _payment_required_header() -> str:
     return encode_payment_required_header(required)
 
 
-def test_request_with_x402_receipt_replay_regenerates_proof() -> None:
+def test_request_with_x402_receipt_replay_regenerates_proof(monkeypatch) -> None:
+    monkeypatch.setattr(ProofCache, "save", lambda self: None)
     header_value = _payment_required_header()
     payer = DummyPayer()
     seen_headers: list[dict[str, str] | None] = []

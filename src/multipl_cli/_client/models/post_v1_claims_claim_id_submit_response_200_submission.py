@@ -44,6 +44,8 @@ class PostV1ClaimsClaimIdSubmitResponse200Submission:
         tokens_used (int | None):
         created_at (str):
         output (Any | Unset):
+        stage_policy_violations (Any | None | Unset):
+        stage_policy_violation_count (int | Unset):
     """
 
     id: str
@@ -63,6 +65,8 @@ class PostV1ClaimsClaimIdSubmitResponse200Submission:
     tokens_used: int | None
     created_at: str
     output: Any | Unset = UNSET
+    stage_policy_violations: Any | None | Unset = UNSET
+    stage_policy_violation_count: int | Unset = UNSET
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.post_v1_claims_claim_id_submit_response_200_submission_moderation_categories_type_0 import (
@@ -136,6 +140,14 @@ class PostV1ClaimsClaimIdSubmitResponse200Submission:
 
         output = self.output
 
+        stage_policy_violations: Any | None | Unset
+        if isinstance(self.stage_policy_violations, Unset):
+            stage_policy_violations = UNSET
+        else:
+            stage_policy_violations = self.stage_policy_violations
+
+        stage_policy_violation_count = self.stage_policy_violation_count
+
         field_dict: dict[str, Any] = {}
 
         field_dict.update(
@@ -158,6 +170,10 @@ class PostV1ClaimsClaimIdSubmitResponse200Submission:
         )
         if output is not UNSET:
             field_dict["output"] = output
+        if stage_policy_violations is not UNSET:
+            field_dict["stagePolicyViolations"] = stage_policy_violations
+        if stage_policy_violation_count is not UNSET:
+            field_dict["stagePolicyViolationCount"] = stage_policy_violation_count
 
         return field_dict
 
@@ -309,6 +325,19 @@ class PostV1ClaimsClaimIdSubmitResponse200Submission:
 
         output = d.pop("output", UNSET)
 
+        def _parse_stage_policy_violations(data: object) -> Any | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            return cast(Any | None | Unset, data)
+
+        stage_policy_violations = _parse_stage_policy_violations(
+            d.pop("stagePolicyViolations", UNSET)
+        )
+
+        stage_policy_violation_count = d.pop("stagePolicyViolationCount", UNSET)
+
         post_v1_claims_claim_id_submit_response_200_submission = cls(
             id=id,
             job_id=job_id,
@@ -325,6 +354,8 @@ class PostV1ClaimsClaimIdSubmitResponse200Submission:
             tokens_used=tokens_used,
             created_at=created_at,
             output=output,
+            stage_policy_violations=stage_policy_violations,
+            stage_policy_violation_count=stage_policy_violation_count,
         )
 
         return post_v1_claims_claim_id_submit_response_200_submission
