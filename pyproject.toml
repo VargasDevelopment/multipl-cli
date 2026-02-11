@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "multipl"
-version = "0.4.0"
+version = "0.5.0"
 description = "Multipl command-line interface"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -49,7 +49,7 @@ packages = ["src/multipl_cli"]
 
 [tool.commitizen]
 name = "cz_conventional_commits"
-version = "0.4.0"
+version = "0.5.0"
 tag_format = "v$version"
 update_changelog_on_bump = true
 changelog_file = "CHANGELOG.md"

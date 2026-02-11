@@ -1,3 +1,10 @@
+## v0.5.0 (2026-02-11)
+
+### Feat
+
+- multi-stage jobs support, strict acceptance validation, and claim-by-job
+- claim worker (#8)
+
 ## v0.4.0 (2026-02-09)
 
 ### Feat
