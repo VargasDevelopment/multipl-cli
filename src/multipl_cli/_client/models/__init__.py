@@ -91,6 +91,25 @@ from .get_v1_jobs_job_id_results_response_402_error import GetV1JobsJobIdResults
 from .get_v1_jobs_job_id_results_response_402_metadata import (
     GetV1JobsJobIdResultsResponse402Metadata,
 )
+from .get_v1_jobs_job_id_stages_response_200 import GetV1JobsJobIdStagesResponse200
+from .get_v1_jobs_job_id_stages_response_200_stages_item import (
+    GetV1JobsJobIdStagesResponse200StagesItem,
+)
+from .get_v1_jobs_job_id_stages_response_200_stages_item_assignment_mode_type_0 import (
+    GetV1JobsJobIdStagesResponse200StagesItemAssignmentModeType0,
+)
+from .get_v1_jobs_job_id_stages_response_200_stages_item_proof_type_0 import (
+    GetV1JobsJobIdStagesResponse200StagesItemProofType0,
+)
+from .get_v1_jobs_job_id_stages_response_200_stages_item_state_type_0 import (
+    GetV1JobsJobIdStagesResponse200StagesItemStateType0,
+)
+from .get_v1_jobs_job_id_stages_response_200_stages_item_state_type_1 import (
+    GetV1JobsJobIdStagesResponse200StagesItemStateType1,
+)
+from .get_v1_jobs_job_id_stages_response_200_stages_item_visibility import (
+    GetV1JobsJobIdStagesResponse200StagesItemVisibility,
+)
 from .get_v1_jobs_lane import GetV1JobsLane
 from .get_v1_jobs_response_200 import GetV1JobsResponse200
 from .get_v1_jobs_response_200_jobs_item import GetV1JobsResponse200JobsItem
@@ -121,6 +140,21 @@ from .get_v1_public_jobs_job_id_response_200_job_verification_policy_type_0_rubr
     GetV1PublicJobsJobIdResponse200JobVerificationPolicyType0RubricType0,
 )
 from .get_v1_public_jobs_job_id_response_200_results import GetV1PublicJobsJobIdResponse200Results
+from .get_v1_public_jobs_job_id_response_200_stages_item import (
+    GetV1PublicJobsJobIdResponse200StagesItem,
+)
+from .get_v1_public_jobs_job_id_response_200_stages_item_public_proof_type_0 import (
+    GetV1PublicJobsJobIdResponse200StagesItemPublicProofType0,
+)
+from .get_v1_public_jobs_job_id_response_200_stages_item_state_type_0 import (
+    GetV1PublicJobsJobIdResponse200StagesItemStateType0,
+)
+from .get_v1_public_jobs_job_id_response_200_stages_item_state_type_1 import (
+    GetV1PublicJobsJobIdResponse200StagesItemStateType1,
+)
+from .get_v1_public_jobs_job_id_response_200_stages_item_visibility import (
+    GetV1PublicJobsJobIdResponse200StagesItemVisibility,
+)
 from .get_v1_public_jobs_job_id_response_200_submission_summary_type_0 import (
     GetV1PublicJobsJobIdResponse200SubmissionSummaryType0,
 )
@@ -313,6 +347,12 @@ from .post_v1_claims_claim_id_submit_response_200_submission_quarantine_reason_t
 from .post_v1_jobs_body import PostV1JobsBody
 from .post_v1_jobs_body_acceptance import PostV1JobsBodyAcceptance
 from .post_v1_jobs_body_input import PostV1JobsBodyInput
+from .post_v1_jobs_body_stages_item import PostV1JobsBodyStagesItem
+from .post_v1_jobs_body_stages_item_acceptance import PostV1JobsBodyStagesItemAcceptance
+from .post_v1_jobs_body_stages_item_assignment_mode import PostV1JobsBodyStagesItemAssignmentMode
+from .post_v1_jobs_body_stages_item_input import PostV1JobsBodyStagesItemInput
+from .post_v1_jobs_body_stages_item_policy import PostV1JobsBodyStagesItemPolicy
+from .post_v1_jobs_body_stages_item_visibility import PostV1JobsBodyStagesItemVisibility
 from .post_v1_jobs_job_id_review_body import PostV1JobsJobIdReviewBody
 from .post_v1_jobs_job_id_review_body_decision import PostV1JobsJobIdReviewBodyDecision
 from .post_v1_jobs_job_id_review_response_200 import PostV1JobsJobIdReviewResponse200
@@ -410,6 +450,13 @@ __all__ = (
     "GetV1JobsJobIdResultsResponse402AcceptanceReportType0Status",
     "GetV1JobsJobIdResultsResponse402Error",
     "GetV1JobsJobIdResultsResponse402Metadata",
+    "GetV1JobsJobIdStagesResponse200",
+    "GetV1JobsJobIdStagesResponse200StagesItem",
+    "GetV1JobsJobIdStagesResponse200StagesItemAssignmentModeType0",
+    "GetV1JobsJobIdStagesResponse200StagesItemProofType0",
+    "GetV1JobsJobIdStagesResponse200StagesItemStateType0",
+    "GetV1JobsJobIdStagesResponse200StagesItemStateType1",
+    "GetV1JobsJobIdStagesResponse200StagesItemVisibility",
     "GetV1JobsLane",
     "GetV1JobsResponse200",
     "GetV1JobsResponse200JobsItem",
@@ -426,6 +473,11 @@ __all__ = (
     "GetV1PublicJobsJobIdResponse200JobVerificationPolicyType0",
     "GetV1PublicJobsJobIdResponse200JobVerificationPolicyType0RubricType0",
     "GetV1PublicJobsJobIdResponse200Results",
+    "GetV1PublicJobsJobIdResponse200StagesItem",
+    "GetV1PublicJobsJobIdResponse200StagesItemPublicProofType0",
+    "GetV1PublicJobsJobIdResponse200StagesItemStateType0",
+    "GetV1PublicJobsJobIdResponse200StagesItemStateType1",
+    "GetV1PublicJobsJobIdResponse200StagesItemVisibility",
     "GetV1PublicJobsJobIdResponse200SubmissionSummaryType0",
     "GetV1PublicJobsJobIdResponse200Verification",
     "GetV1PublicJobsJobIdResponse200VerificationJobsItem",
@@ -512,6 +564,12 @@ __all__ = (
     "PostV1JobsBody",
     "PostV1JobsBodyAcceptance",
     "PostV1JobsBodyInput",
+    "PostV1JobsBodyStagesItem",
+    "PostV1JobsBodyStagesItemAcceptance",
+    "PostV1JobsBodyStagesItemAssignmentMode",
+    "PostV1JobsBodyStagesItemInput",
+    "PostV1JobsBodyStagesItemPolicy",
+    "PostV1JobsBodyStagesItemVisibility",
     "PostV1JobsJobIdReviewBody",
     "PostV1JobsJobIdReviewBodyDecision",
     "PostV1JobsJobIdReviewResponse200",

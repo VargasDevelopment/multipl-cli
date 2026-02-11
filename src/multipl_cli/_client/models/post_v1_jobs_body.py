@@ -10,6 +10,7 @@ from ..types import UNSET, Unset
 if TYPE_CHECKING:
     from ..models.post_v1_jobs_body_acceptance import PostV1JobsBodyAcceptance
     from ..models.post_v1_jobs_body_input import PostV1JobsBodyInput
+    from ..models.post_v1_jobs_body_stages_item import PostV1JobsBodyStagesItem
 
 
 T = TypeVar("T", bound="PostV1JobsBody")
@@ -27,6 +28,7 @@ class PostV1JobsBody:
         deadline_seconds (int | Unset):
         payout_cents (int | Unset):
         job_ttl_seconds (int | Unset):
+        stages (list[PostV1JobsBodyStagesItem] | Unset):
     """
 
     task_type: str
@@ -37,6 +39,7 @@ class PostV1JobsBody:
     deadline_seconds: int | Unset = UNSET
     payout_cents: int | Unset = UNSET
     job_ttl_seconds: int | Unset = UNSET
+    stages: list[PostV1JobsBodyStagesItem] | Unset = UNSET
 
     def to_dict(self) -> dict[str, Any]:
         task_type = self.task_type
@@ -56,6 +59,13 @@ class PostV1JobsBody:
         payout_cents = self.payout_cents
 
         job_ttl_seconds = self.job_ttl_seconds
+
+        stages: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.stages, Unset):
+            stages = []
+            for stages_item_data in self.stages:
+                stages_item = stages_item_data.to_dict()
+                stages.append(stages_item)
 
         field_dict: dict[str, Any] = {}
 
@@ -77,6 +87,8 @@ class PostV1JobsBody:
             field_dict["payoutCents"] = payout_cents
         if job_ttl_seconds is not UNSET:
             field_dict["jobTtlSeconds"] = job_ttl_seconds
+        if stages is not UNSET:
+            field_dict["stages"] = stages
 
         return field_dict
 
@@ -84,6 +96,7 @@ class PostV1JobsBody:
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.post_v1_jobs_body_acceptance import PostV1JobsBodyAcceptance
         from ..models.post_v1_jobs_body_input import PostV1JobsBodyInput
+        from ..models.post_v1_jobs_body_stages_item import PostV1JobsBodyStagesItem
 
         d = dict(src_dict)
         task_type = d.pop("taskType")
@@ -107,6 +120,15 @@ class PostV1JobsBody:
 
         job_ttl_seconds = d.pop("jobTtlSeconds", UNSET)
 
+        _stages = d.pop("stages", UNSET)
+        stages: list[PostV1JobsBodyStagesItem] | Unset = UNSET
+        if _stages is not UNSET:
+            stages = []
+            for stages_item_data in _stages:
+                stages_item = PostV1JobsBodyStagesItem.from_dict(stages_item_data)
+
+                stages.append(stages_item)
+
         post_v1_jobs_body = cls(
             task_type=task_type,
             input_=input_,
@@ -116,6 +138,7 @@ class PostV1JobsBody:
             deadline_seconds=deadline_seconds,
             payout_cents=payout_cents,
             job_ttl_seconds=job_ttl_seconds,
+            stages=stages,
         )
 
         return post_v1_jobs_body

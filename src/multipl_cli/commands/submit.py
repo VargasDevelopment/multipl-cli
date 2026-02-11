@@ -3,13 +3,11 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.table import Table
 
-from multipl_cli._client.models.get_v1_public_jobs_job_id_response_200 import (
-    GetV1PublicJobsJobIdResponse200,
-)
 from multipl_cli._client.models.post_v1_claims_claim_id_submit_body import (
     PostV1ClaimsClaimIdSubmitBody,
 )
@@ -34,8 +32,33 @@ def _fetch_acceptance_contract(client, job_id: str):
     if response.status_code != 200:
         console.print(f"[red]Failed to fetch job (status={response.status_code}).[/red]")
         raise typer.Exit(code=2)
-    parsed = GetV1PublicJobsJobIdResponse200.from_dict(response.json())
-    return parsed.job.acceptance_contract
+    payload = response.json()
+    if not isinstance(payload, dict):
+        console.print("[red]Invalid public job response payload.[/red]")
+        raise typer.Exit(code=2)
+    job_payload = payload.get("job")
+    if not isinstance(job_payload, dict):
+        console.print("[red]Invalid public job response payload.[/red]")
+        raise typer.Exit(code=2)
+    acceptance_contract = job_payload.get("acceptanceContract")
+    stages = payload.get("stages")
+    is_staged = isinstance(stages, list) and len(stages) > 0
+    return acceptance_contract, is_staged
+
+
+def _build_validation_report(
+    *,
+    acceptance_contract: Any,
+    payload: Any,
+    is_staged: bool,
+):
+    if not is_staged:
+        return validate_acceptance(acceptance_contract, payload), False
+
+    report = validate_acceptance(None, payload)
+    if report.checks:
+        report.checks[0]["reason"] = "skipped local validation for staged job; server validates stage acceptance"
+    return report, True
 
 
 def _render_report(report):
@@ -68,8 +91,16 @@ def validate(
     client = build_client(state.base_url)
 
     payload = _load_json(file)
-    acceptance_contract = _fetch_acceptance_contract(client, job_id)
-    report = validate_acceptance(acceptance_contract, payload)
+    acceptance_contract, is_staged = _fetch_acceptance_contract(client, job_id)
+    report, skipped_for_staged = _build_validation_report(
+        acceptance_contract=acceptance_contract,
+        payload=payload,
+        is_staged=is_staged,
+    )
+    if skipped_for_staged and not json_output:
+        console.print(
+            "[yellow]Skipping local acceptance validation for staged jobs; server validation applies.[/yellow]"
+        )
     if json_output:
         console.print(asdict(report))
     else:
@@ -103,8 +134,16 @@ def send(
     payload = _load_json(file)
 
     if not force:
-        acceptance_contract = _fetch_acceptance_contract(client, job_id)
-        report = validate_acceptance(acceptance_contract, payload)
+        acceptance_contract, is_staged = _fetch_acceptance_contract(client, job_id)
+        report, skipped_for_staged = _build_validation_report(
+            acceptance_contract=acceptance_contract,
+            payload=payload,
+            is_staged=is_staged,
+        )
+        if skipped_for_staged and not json_output:
+            console.print(
+                "[yellow]Skipping local acceptance validation for staged jobs; server validation applies.[/yellow]"
+            )
         if json_output:
             console.print(asdict(report))
         else:

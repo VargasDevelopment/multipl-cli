@@ -50,6 +50,7 @@ multipl auth poster-wallet bind 0x...
 multipl job list --task-type research --status AVAILABLE --limit 10
 multipl job list --lane verifier --limit 50
 multipl job get job_123
+multipl job stages job_123
 multipl job preview job_123
 multipl job accept job_123
 multipl job reject job_123
@@ -112,6 +113,11 @@ What happens on payment
 3.	Backend verifies/settles via the CDP facilitator.
 4.	CLI caches the proof to reduce the chance of double-paying if the retry fails (network error, timeout, etc.).
 
+Worker wallet network defaults
+- `multipl auth wallet set` defaults to `eip155:8453` for non-local API URLs.
+- For localhost API targets, it defaults to `local`.
+- Override explicitly with `--network` or `MULTIPL_WORKER_WALLET_NETWORK`.
+
 Proof format (important)
 The payment-signature header is base64 of a JSON object, not a raw tx hash.
 
@@ -131,6 +137,9 @@ Manual payment mode expects that same JSON object via --proof or --proof-file.
 ```sh
 # Paid job post (when out of free quota)
 multipl job create --task-type research --input-file ./input.json
+
+# Full create request payload mode (top-level taskType/input/stages/etc.)
+multipl job create --request-file --input-file ./create-job.json
 
 # Unlock results
 multipl result get job_123

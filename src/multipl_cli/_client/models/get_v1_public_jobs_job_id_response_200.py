@@ -14,6 +14,9 @@ if TYPE_CHECKING:
     from ..models.get_v1_public_jobs_job_id_response_200_results import (
         GetV1PublicJobsJobIdResponse200Results,
     )
+    from ..models.get_v1_public_jobs_job_id_response_200_stages_item import (
+        GetV1PublicJobsJobIdResponse200StagesItem,
+    )
     from ..models.get_v1_public_jobs_job_id_response_200_submission_summary_type_0 import (
         GetV1PublicJobsJobIdResponse200SubmissionSummaryType0,
     )
@@ -37,6 +40,7 @@ class GetV1PublicJobsJobIdResponse200:
         results (GetV1PublicJobsJobIdResponse200Results):
         verification (GetV1PublicJobsJobIdResponse200Verification | Unset):
         verifier_context (GetV1PublicJobsJobIdResponse200VerifierContext | Unset):
+        stages (list[GetV1PublicJobsJobIdResponse200StagesItem] | Unset):
     """
 
     job: GetV1PublicJobsJobIdResponse200Job
@@ -44,6 +48,7 @@ class GetV1PublicJobsJobIdResponse200:
     results: GetV1PublicJobsJobIdResponse200Results
     verification: GetV1PublicJobsJobIdResponse200Verification | Unset = UNSET
     verifier_context: GetV1PublicJobsJobIdResponse200VerifierContext | Unset = UNSET
+    stages: list[GetV1PublicJobsJobIdResponse200StagesItem] | Unset = UNSET
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.get_v1_public_jobs_job_id_response_200_submission_summary_type_0 import (
@@ -70,6 +75,13 @@ class GetV1PublicJobsJobIdResponse200:
         if not isinstance(self.verifier_context, Unset):
             verifier_context = self.verifier_context.to_dict()
 
+        stages: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.stages, Unset):
+            stages = []
+            for stages_item_data in self.stages:
+                stages_item = stages_item_data.to_dict()
+                stages.append(stages_item)
+
         field_dict: dict[str, Any] = {}
 
         field_dict.update(
@@ -83,6 +95,8 @@ class GetV1PublicJobsJobIdResponse200:
             field_dict["verification"] = verification
         if verifier_context is not UNSET:
             field_dict["verifierContext"] = verifier_context
+        if stages is not UNSET:
+            field_dict["stages"] = stages
 
         return field_dict
 
@@ -93,6 +107,9 @@ class GetV1PublicJobsJobIdResponse200:
         )
         from ..models.get_v1_public_jobs_job_id_response_200_results import (
             GetV1PublicJobsJobIdResponse200Results,
+        )
+        from ..models.get_v1_public_jobs_job_id_response_200_stages_item import (
+            GetV1PublicJobsJobIdResponse200StagesItem,
         )
         from ..models.get_v1_public_jobs_job_id_response_200_submission_summary_type_0 import (
             GetV1PublicJobsJobIdResponse200SubmissionSummaryType0,
@@ -144,12 +161,22 @@ class GetV1PublicJobsJobIdResponse200:
                 _verifier_context
             )
 
+        _stages = d.pop("stages", UNSET)
+        stages: list[GetV1PublicJobsJobIdResponse200StagesItem] | Unset = UNSET
+        if _stages is not UNSET:
+            stages = []
+            for stages_item_data in _stages:
+                stages_item = GetV1PublicJobsJobIdResponse200StagesItem.from_dict(stages_item_data)
+
+                stages.append(stages_item)
+
         get_v1_public_jobs_job_id_response_200 = cls(
             job=job,
             submission_summary=submission_summary,
             results=results,
             verification=verification,
             verifier_context=verifier_context,
+            stages=stages,
         )
 
         return get_v1_public_jobs_job_id_response_200
