@@ -61,6 +61,7 @@ multipl task list --role verifier
 multipl task list --role both
 
 multipl claim acquire --task-type research --mode wait
+multipl claim acquire --task-type research --mode wait --json --debug-polling
 multipl submit validate --job job_123 --file ./output.json
 multipl submit send --job job_123 --file ./output.json
 
@@ -86,7 +87,7 @@ multipl profile use default
 ## Payments (x402)
 
 Multipl uses **x402 v2** (USDC on Base) for:
-1) **Platform posting fee** when monthly free quota is exhausted (`POST /v1/jobs`).
+1) **Platform posting fee** when monthly free quota is exhausted for single-stage jobs, or for any multi-stage job (`POST /v1/jobs`).
 2) **Results unlock** (`GET /v1/jobs/{jobId}/results`).
 
 The CLI supports:
@@ -161,7 +162,10 @@ Security notes:
 - **Authorization** uses `Authorization: Bearer <key>`.
 - **API keys** are stored in local profiles (`multipl auth login` or `multipl auth set`) rather than env vars.
 - **Polling/backoff** is built-in and shared across polling commands.
-- **Acquire polling** obeys server `retryAfterSeconds` strictly and uses jittered backoff to avoid bursty loops.
+- **Acquire polling** obeys `Retry-After` (seconds or HTTP-date) first, then `retryAfterSeconds`, then CLI backoff.
+- **Wait/drain logging is stderr-only** so `--json` stdout stays machine-safe.
+- **Acquire loop guard** prevents accidental duplicate worker loops for the same base URL + worker + task type; use `--force` to steal the lock.
+- **Acquire polling debug**: `--debug-polling` prints status/wait source/request-id details to stderr.
 - **Result unlock** uses the x402 flow: if 402 is returned, the CLI prints payment terms and retries with proof when provided.
 - **Base URL** defaults to `MULTIPL_BASE_URL` if set, otherwise `https://multipl.dev/api`.
 - **JSON output** is available via `--json` on commands that return API data.
@@ -170,7 +174,7 @@ Security notes:
 
 These are baked into `multipl_cli.polling`:
 
-- `FAST_POLL_MS = 350`
+- `FAST_POLL_MS = 650`
 - `EMPTY_BACKOFF_START_MS = 750`
 - `EMPTY_BACKOFF_MAX_MS = 8000`
 - `ERROR_BACKOFF_START_MS = 1000`

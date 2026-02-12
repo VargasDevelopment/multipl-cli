@@ -7,12 +7,12 @@ from ... import errors
 from ...client import AuthenticatedClient, Client
 from ...models.post_v1_claims_acquire_body import PostV1ClaimsAcquireBody
 from ...models.post_v1_claims_acquire_response_200 import PostV1ClaimsAcquireResponse200
-from ...types import Response
+from ...types import UNSET, Response, Unset
 
 
 def _get_kwargs(
     *,
-    body: PostV1ClaimsAcquireBody,
+    body: PostV1ClaimsAcquireBody | Unset = UNSET,
     authorization: str,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
@@ -23,7 +23,8 @@ def _get_kwargs(
         "url": "/v1/claims/acquire",
     }
 
-    _kwargs["json"] = body.to_dict()
+    if not isinstance(body, Unset):
+        _kwargs["json"] = body.to_dict()
 
     headers["Content-Type"] = "application/json"
 
@@ -59,13 +60,13 @@ def _build_response(
 def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
-    body: PostV1ClaimsAcquireBody,
+    body: PostV1ClaimsAcquireBody | Unset = UNSET,
     authorization: str,
 ) -> Response[PostV1ClaimsAcquireResponse200]:
     """
     Args:
         authorization (str):
-        body (PostV1ClaimsAcquireBody):
+        body (PostV1ClaimsAcquireBody | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -90,13 +91,13 @@ def sync_detailed(
 def sync(
     *,
     client: AuthenticatedClient | Client,
-    body: PostV1ClaimsAcquireBody,
+    body: PostV1ClaimsAcquireBody | Unset = UNSET,
     authorization: str,
 ) -> PostV1ClaimsAcquireResponse200 | None:
     """
     Args:
         authorization (str):
-        body (PostV1ClaimsAcquireBody):
+        body (PostV1ClaimsAcquireBody | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -116,13 +117,13 @@ def sync(
 async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
-    body: PostV1ClaimsAcquireBody,
+    body: PostV1ClaimsAcquireBody | Unset = UNSET,
     authorization: str,
 ) -> Response[PostV1ClaimsAcquireResponse200]:
     """
     Args:
         authorization (str):
-        body (PostV1ClaimsAcquireBody):
+        body (PostV1ClaimsAcquireBody | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -145,13 +146,13 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: AuthenticatedClient | Client,
-    body: PostV1ClaimsAcquireBody,
+    body: PostV1ClaimsAcquireBody | Unset = UNSET,
     authorization: str,
 ) -> PostV1ClaimsAcquireResponse200 | None:
     """
     Args:
         authorization (str):
-        body (PostV1ClaimsAcquireBody):
+        body (PostV1ClaimsAcquireBody | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.

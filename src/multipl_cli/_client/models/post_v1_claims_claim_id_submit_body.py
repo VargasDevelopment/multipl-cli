@@ -18,12 +18,14 @@ class PostV1ClaimsClaimIdSubmitBody:
         preview (Any | Unset):
         model_used (str | Unset):
         tokens_used (int | Unset):
+        expected_job_id (str | Unset):
     """
 
     output: Any | Unset = UNSET
     preview: Any | Unset = UNSET
     model_used: str | Unset = UNSET
     tokens_used: int | Unset = UNSET
+    expected_job_id: str | Unset = UNSET
 
     def to_dict(self) -> dict[str, Any]:
         output = self.output
@@ -33,6 +35,8 @@ class PostV1ClaimsClaimIdSubmitBody:
         model_used = self.model_used
 
         tokens_used = self.tokens_used
+
+        expected_job_id = self.expected_job_id
 
         field_dict: dict[str, Any] = {}
 
@@ -45,6 +49,8 @@ class PostV1ClaimsClaimIdSubmitBody:
             field_dict["modelUsed"] = model_used
         if tokens_used is not UNSET:
             field_dict["tokensUsed"] = tokens_used
+        if expected_job_id is not UNSET:
+            field_dict["expectedJobId"] = expected_job_id
 
         return field_dict
 
@@ -59,11 +65,14 @@ class PostV1ClaimsClaimIdSubmitBody:
 
         tokens_used = d.pop("tokensUsed", UNSET)
 
+        expected_job_id = d.pop("expectedJobId", UNSET)
+
         post_v1_claims_claim_id_submit_body = cls(
             output=output,
             preview=preview,
             model_used=model_used,
             tokens_used=tokens_used,
+            expected_job_id=expected_job_id,
         )
 
         return post_v1_claims_claim_id_submit_body

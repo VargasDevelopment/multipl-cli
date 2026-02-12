@@ -1786,7 +1786,7 @@
                       "additionalProperties": false
                     },
                     "minItems": 1,
-                    "maxItems": 32
+                    "maxItems": 8
                   }
                 },
                 "required": [
@@ -3465,16 +3465,16 @@
                   "taskType": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "jobId": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
-                "required": [
-                  "taskType"
-                ],
                 "additionalProperties": false
               }
             }
-          },
-          "required": true
+          }
         },
         "parameters": [
           {
@@ -4049,6 +4049,10 @@
                   "tokensUsed": {
                     "type": "integer",
                     "minimum": 0
+                  },
+                  "expectedJobId": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "additionalProperties": false
@@ -4405,11 +4409,103 @@
                         "contentSha256"
                       ],
                       "additionalProperties": false
+                    },
+                    "acceptanceReport": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "version": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "pass",
+                                "fail",
+                                "skipped",
+                                "error"
+                              ]
+                            },
+                            "checks": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "passed": {
+                                    "type": "boolean"
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "details": {}
+                                },
+                                "required": [
+                                  "name",
+                                  "passed"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "stats": {
+                              "type": "object",
+                              "properties": {
+                                "bytes": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "topLevelKeys": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "bytes"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "commitment": {
+                              "type": "object",
+                              "properties": {
+                                "sha256": {
+                                  "type": "string"
+                                },
+                                "computedAt": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "sha256",
+                                "computedAt"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "version",
+                            "status",
+                            "checks",
+                            "stats",
+                            "commitment"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   },
                   "required": [
                     "submission",
-                    "job"
+                    "job",
+                    "acceptanceReport"
                   ],
                   "additionalProperties": false
                 }

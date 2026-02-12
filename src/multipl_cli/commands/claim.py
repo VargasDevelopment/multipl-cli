@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import signal
+import time
+from contextlib import nullcontext
+from dataclasses import dataclass
+from types import FrameType
+from urllib.parse import urlparse
 
 import typer
 from rich.table import Table
@@ -15,7 +22,14 @@ from multipl_cli.app_state import AppState
 from multipl_cli.config import ClaimsCache
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
-from multipl_cli.polling import extract_retry_after_seconds, poll_with_backoff
+from multipl_cli.polling import (
+    extract_request_id,
+    extract_retry_after_seconds,
+    maybe_extract_kind,
+    parse_response_json,
+    poll_with_backoff,
+)
+from multipl_cli.polling_lock import LockHeldError, acquire_loop_lock
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -39,6 +53,10 @@ def _print_claim(claim: PostV1ClaimsAcquireResponse200) -> None:
     table.add_row("taskType", claim.job.task_type)
     table.add_row("leaseExpiresAt", claim.claim.lease_expires_at)
     console.print(table)
+
+
+def _stderr(message: str) -> None:
+    typer.echo(message, err=True)
 
 
 COOLDOWN_CODES = {
@@ -66,6 +84,72 @@ def _render_rate_limit_notice(payload: dict, retry_after: int | None, *, is_retr
     return f"Rate limited. {_format_retry_after(retry_after, is_retrying=is_retrying)}"
 
 
+def _short_base_url(base_url: str) -> str:
+    parsed = urlparse(base_url)
+    if parsed.netloc:
+        return parsed.netloc
+    return base_url
+
+
+def _worker_identity(worker_api_key: str) -> str:
+    digest = hashlib.sha256(worker_api_key.encode("utf-8")).hexdigest()[:12]
+    return f"worker:{digest}"
+
+
+def _lock_conflict_message(error: LockHeldError) -> str:
+    pid = error.existing_payload.get("pid")
+    started_at = error.existing_payload.get("startedAt")
+    pid_msg = f" pid={pid}" if pid is not None else ""
+    start_msg = f" startedAt={started_at}" if started_at else ""
+    return (
+        "Another `multipl claim acquire` wait/drain loop is already running for this "
+        f"worker/task/baseUrl.{pid_msg}{start_msg} Use `--force` to steal the lock."
+    )
+
+
+@dataclass
+class _HeartbeatReporter:
+    interval_seconds: int = 30
+    _last_emit: float = 0.0
+
+    def maybe_emit(self, *, task_type: str, base_url: str, next_delay_seconds: float) -> None:
+        now = time.monotonic()
+        if self._last_emit > 0 and (now - self._last_emit) < self.interval_seconds:
+            return
+        self._last_emit = now
+        _stderr(
+            "Still waiting for a claim "
+            f"(taskType={task_type}, base={_short_base_url(base_url)}). "
+            f"Next poll in {max(next_delay_seconds, 0):.1f}s."
+        )
+
+
+def _install_lock_signal_handlers(lock) -> tuple[dict[int, signal.Handlers], list[int]]:
+    previous_handlers: dict[int, signal.Handlers] = {}
+    tracked_signals = [signal.SIGINT]
+    if hasattr(signal, "SIGTERM"):
+        tracked_signals.append(signal.SIGTERM)
+
+    def _handler(signum: int, _frame: FrameType | None) -> None:
+        lock.release()
+        previous = previous_handlers.get(signum)
+        if callable(previous):
+            previous(signum, _frame)
+            return
+        raise KeyboardInterrupt()
+
+    for sig in tracked_signals:
+        previous_handlers[sig] = signal.getsignal(sig)
+        signal.signal(sig, _handler)
+
+    return previous_handlers, tracked_signals
+
+
+def _restore_signal_handlers(previous_handlers: dict[int, signal.Handlers], tracked_signals: list[int]) -> None:
+    for sig in tracked_signals:
+        signal.signal(sig, previous_handlers[sig])
+
+
 @app.command("acquire")
 def acquire(
     ctx: typer.Context,
@@ -76,6 +160,16 @@ def acquire(
         "--mode",
         help="single | wait | drain",
         case_sensitive=False,
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Steal polling lock if another acquire wait/drain loop is running",
+    ),
+    debug_polling: bool = typer.Option(
+        False,
+        "--debug-polling",
+        help="Print polling status/debug details to stderr",
     ),
     json_output: bool = typer.Option(False, "--json", help="Output JSON"),
 ) -> None:
@@ -122,28 +216,71 @@ def acquire(
             _print_claim(parsed)
         saw_success = True
 
+    heartbeat = _HeartbeatReporter()
+
     def handle_empty(_response):
-        if mode == "drain" and saw_success:
-            if not json_output:
-                console.print("No jobs available. Drain complete.")
+        if mode == "drain" and saw_success and not json_output:
+            console.print("No jobs available. Drain complete.")
+
+    def handle_rate_limited(response, retry_after: int, source: str):
+        payload = parse_response_json(response)
+        kind = maybe_extract_kind(payload) or "rate limited"
+        _stderr(
+            "429 received: "
+            f"reason={kind}, retry-after={retry_after}s. Sleeping and will retry."
+        )
+        if retry_after >= 60:
+            _stderr(
+                "Hint: long retry-after may indicate cooldown/penalty state "
+                "or multiple worker loops running."
+            )
+        if debug_polling:
+            request_id = extract_request_id(response.headers) or "-"
+            _stderr(
+                "[debug-polling] "
+                f"status=429 wait={retry_after}s source={source} request_id={request_id}"
+            )
+
+    def handle_transient_error(error):
+        if mode == "single":
+            return
+        if isinstance(error, Exception):
+            status = "exception"
+            request_id = "-"
         else:
-            if not json_output:
-                console.print("No jobs available. Backing off...")
+            status = str(error.status_code)
+            request_id = extract_request_id(error.headers) or "-"
+        _stderr("Transient error. Sleeping with backoff and retrying.")
+        if debug_polling:
+            _stderr(
+                "[debug-polling] "
+                f"status={status} wait=backoff source=backoff request_id={request_id}"
+            )
 
-    def handle_rate_limited(response, retry_after):
-        payload = _parse_json_body(response)
-        if not json_output:
-            console.print(_render_rate_limit_notice(payload, retry_after, is_retrying=True))
-
-    def handle_transient_error(_error):
-        if not json_output:
-            console.print("Transient error. Retrying with backoff...")
+    def handle_sleep(seconds: float, reason: str, response, source: str) -> None:
+        if mode not in {"wait", "drain"}:
+            return
+        if debug_polling:
+            status = str(response.status_code) if response is not None else "exception"
+            request_id = extract_request_id(response.headers) if response is not None else None
+            _stderr(
+                "[debug-polling] "
+                f"status={status} wait={max(seconds, 0):.1f}s source={source} request_id={request_id or '-'}"
+            )
+        if reason != "rate_limited" and task_type:
+            heartbeat.maybe_emit(
+                task_type=task_type,
+                base_url=state.base_url,
+                next_delay_seconds=seconds,
+            )
 
     def handle_non_retryable(response):
         payload = _parse_json_body(response)
-        console.print(
-            f"[red]Acquire failed (status={response.status_code}).[/red] {payload or ''}"
-        )
+        message = f"Acquire failed (status={response.status_code}). {payload or ''}".strip()
+        if mode in {"wait", "drain"}:
+            _stderr(message)
+        else:
+            console.print(f"[red]Acquire failed (status={response.status_code}).[/red] {payload or ''}")
         if response.status_code in {400, 409, 422}:
             raise typer.Exit(code=1)
         raise typer.Exit(code=2)
@@ -157,6 +294,9 @@ def acquire(
         raise typer.Exit(code=1)
     if job_id and mode != "single":
         console.print("[red]--job only supports --mode single.[/red]")
+        raise typer.Exit(code=1)
+    if force and mode == "single":
+        console.print("[red]--force is only supported for --mode wait or --mode drain.[/red]")
         raise typer.Exit(code=1)
 
     if mode == "single":
@@ -180,16 +320,37 @@ def acquire(
         handle_non_retryable(response)
         return
 
-    poll_with_backoff(
-        request_fn=request_once,
-        mode=mode,
-        empty_statuses=[204],
-        handle_success=handle_success,
-        handle_empty=handle_empty,
-        handle_rate_limited=handle_rate_limited,
-        handle_transient_error=handle_transient_error,
-        handle_non_retryable=handle_non_retryable,
-    )
+    lock = None
+    previous_handlers: dict[int, signal.Handlers] = {}
+    tracked_signals: list[int] = []
+    try:
+        lock = acquire_loop_lock(
+            base_url=state.base_url,
+            worker_identity=_worker_identity(profile.worker_api_key),
+            task_type=task_type or "unknown",
+            force=force,
+        )
+    except LockHeldError as exc:
+        _stderr(_lock_conflict_message(exc))
+        raise typer.Exit(code=3) from exc
+
+    cleanup_context = lock if lock is not None else nullcontext()
+    with cleanup_context:
+        previous_handlers, tracked_signals = _install_lock_signal_handlers(lock)
+        try:
+            poll_with_backoff(
+                request_fn=request_once,
+                mode=mode,
+                empty_statuses=[204],
+                handle_success=handle_success,
+                handle_empty=handle_empty,
+                handle_rate_limited=handle_rate_limited,
+                handle_transient_error=handle_transient_error,
+                handle_non_retryable=handle_non_retryable,
+                handle_sleep=handle_sleep,
+            )
+        finally:
+            _restore_signal_handlers(previous_handlers, tracked_signals)
 
 
 @app.command("release")
