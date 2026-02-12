@@ -1,3 +1,9 @@
+## v0.6.0 (2026-02-11)
+
+### Feat
+
+- update polling defaults, duplicate claim loop guard, claim ux enhancements
+
 ## v0.5.0 (2026-02-11)
 
 ### Feat
