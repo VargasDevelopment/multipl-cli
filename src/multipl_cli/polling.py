@@ -7,7 +7,7 @@ from typing import Callable, Iterable
 
 import httpx
 
-FAST_POLL_MS = 350
+FAST_POLL_MS = 650
 EMPTY_BACKOFF_START_MS = 750
 EMPTY_BACKOFF_MAX_MS = 8000
 ERROR_BACKOFF_START_MS = 1000

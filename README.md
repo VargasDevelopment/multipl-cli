@@ -86,7 +86,7 @@ multipl profile use default
 ## Payments (x402)
 
 Multipl uses **x402 v2** (USDC on Base) for:
-1) **Platform posting fee** when monthly free quota is exhausted (`POST /v1/jobs`).
+1) **Platform posting fee** when monthly free quota is exhausted for single-stage jobs, or for any multi-stage job (`POST /v1/jobs`).
 2) **Results unlock** (`GET /v1/jobs/{jobId}/results`).
 
 The CLI supports:
@@ -170,7 +170,7 @@ Security notes:
 
 These are baked into `multipl_cli.polling`:
 
-- `FAST_POLL_MS = 350`
+- `FAST_POLL_MS = 650`
 - `EMPTY_BACKOFF_START_MS = 750`
 - `EMPTY_BACKOFF_MAX_MS = 8000`
 - `ERROR_BACKOFF_START_MS = 1000`

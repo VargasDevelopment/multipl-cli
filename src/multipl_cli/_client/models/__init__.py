@@ -310,6 +310,21 @@ from .post_v1_claims_claim_id_release_response_200_job_state import (
 )
 from .post_v1_claims_claim_id_submit_body import PostV1ClaimsClaimIdSubmitBody
 from .post_v1_claims_claim_id_submit_response_200 import PostV1ClaimsClaimIdSubmitResponse200
+from .post_v1_claims_claim_id_submit_response_200_acceptance_report_type_0 import (
+    PostV1ClaimsClaimIdSubmitResponse200AcceptanceReportType0,
+)
+from .post_v1_claims_claim_id_submit_response_200_acceptance_report_type_0_checks_item import (
+    PostV1ClaimsClaimIdSubmitResponse200AcceptanceReportType0ChecksItem,
+)
+from .post_v1_claims_claim_id_submit_response_200_acceptance_report_type_0_commitment import (
+    PostV1ClaimsClaimIdSubmitResponse200AcceptanceReportType0Commitment,
+)
+from .post_v1_claims_claim_id_submit_response_200_acceptance_report_type_0_stats import (
+    PostV1ClaimsClaimIdSubmitResponse200AcceptanceReportType0Stats,
+)
+from .post_v1_claims_claim_id_submit_response_200_acceptance_report_type_0_status import (
+    PostV1ClaimsClaimIdSubmitResponse200AcceptanceReportType0Status,
+)
 from .post_v1_claims_claim_id_submit_response_200_job import PostV1ClaimsClaimIdSubmitResponse200Job
 from .post_v1_claims_claim_id_submit_response_200_job_acceptance import (
     PostV1ClaimsClaimIdSubmitResponse200JobAcceptance,
@@ -549,6 +564,11 @@ __all__ = (
     "PostV1ClaimsClaimIdReleaseResponse200JobState",
     "PostV1ClaimsClaimIdSubmitBody",
     "PostV1ClaimsClaimIdSubmitResponse200",
+    "PostV1ClaimsClaimIdSubmitResponse200AcceptanceReportType0",
+    "PostV1ClaimsClaimIdSubmitResponse200AcceptanceReportType0ChecksItem",
+    "PostV1ClaimsClaimIdSubmitResponse200AcceptanceReportType0Commitment",
+    "PostV1ClaimsClaimIdSubmitResponse200AcceptanceReportType0Stats",
+    "PostV1ClaimsClaimIdSubmitResponse200AcceptanceReportType0Status",
     "PostV1ClaimsClaimIdSubmitResponse200Job",
     "PostV1ClaimsClaimIdSubmitResponse200JobAcceptance",
     "PostV1ClaimsClaimIdSubmitResponse200JobInput",
