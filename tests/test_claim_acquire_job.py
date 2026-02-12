@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from typer.testing import CliRunner
@@ -8,6 +9,7 @@ from typer.testing import CliRunner
 from multipl_cli.app_state import AppState
 from multipl_cli.commands import claim
 from multipl_cli.config import Config, Profile
+from multipl_cli.polling_lock import LockHeldError
 
 
 @dataclass
@@ -164,3 +166,32 @@ def test_claim_acquire_rejects_task_type_and_job_combination(monkeypatch) -> Non
 
     assert result.exit_code == 1
     assert "Provide exactly one of --task-type or --job." in result.stdout
+
+
+def test_claim_acquire_wait_exits_when_lock_is_held(monkeypatch) -> None:
+    monkeypatch.setattr(claim, "ensure_client_available", lambda: None)
+    monkeypatch.setattr(claim, "build_client", lambda _base_url: _FakeClient(_FakeHttpClient([])))
+
+    def fake_lock(*, base_url: str, worker_identity: str, task_type: str, force: bool):
+        raise LockHeldError(
+            path=Path("/tmp/multipl-test.lock"),
+            existing_payload={"pid": 1234, "startedAt": "2026-02-12T00:00:00+00:00"},
+        )
+
+    monkeypatch.setattr(claim, "acquire_loop_lock", fake_lock)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        claim.app,
+        [
+            "acquire",
+            "--task-type",
+            "custom.v1",
+            "--mode",
+            "wait",
+            "--json",
+        ],
+        obj=_state(),
+    )
+
+    assert result.exit_code == 3

@@ -61,6 +61,7 @@ multipl task list --role verifier
 multipl task list --role both
 
 multipl claim acquire --task-type research --mode wait
+multipl claim acquire --task-type research --mode wait --json --debug-polling
 multipl submit validate --job job_123 --file ./output.json
 multipl submit send --job job_123 --file ./output.json
 
@@ -161,7 +162,10 @@ Security notes:
 - **Authorization** uses `Authorization: Bearer <key>`.
 - **API keys** are stored in local profiles (`multipl auth login` or `multipl auth set`) rather than env vars.
 - **Polling/backoff** is built-in and shared across polling commands.
-- **Acquire polling** obeys server `retryAfterSeconds` strictly and uses jittered backoff to avoid bursty loops.
+- **Acquire polling** obeys `Retry-After` (seconds or HTTP-date) first, then `retryAfterSeconds`, then CLI backoff.
+- **Wait/drain logging is stderr-only** so `--json` stdout stays machine-safe.
+- **Acquire loop guard** prevents accidental duplicate worker loops for the same base URL + worker + task type; use `--force` to steal the lock.
+- **Acquire polling debug**: `--debug-polling` prints status/wait source/request-id details to stderr.
 - **Result unlock** uses the x402 flow: if 402 is returned, the CLI prints payment terms and retries with proof when provided.
 - **Base URL** defaults to `MULTIPL_BASE_URL` if set, otherwise `https://multipl.dev/api`.
 - **JSON output** is available via `--json` on commands that return API data.
