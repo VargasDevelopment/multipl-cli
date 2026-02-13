@@ -345,6 +345,93 @@ def test_job_create_template_set_integer_type_error_suggests_set_json() -> None:
     assert result.exit_code == 2
 
 
+def test_job_create_template_from_gh_populates_inputs() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        job.app,
+        [
+            "create",
+            "--template",
+            "github_issue.v1",
+            "--template-file",
+            str(_template_fixture_path()),
+            "--from-gh",
+            "https://github.com/octocat/hello-world/issues/123?foo=bar",
+            "--stage-payout-cents",
+            "1=1000",
+            "--stage-payout-cents",
+            "2=2000",
+            "--stage-payout-cents",
+            "3=2000",
+            "--dry-run",
+            "--json",
+        ],
+        obj=_state(),
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["input"]["repo"] == "octocat/hello-world"
+    assert payload["input"]["issueNumber"] == 123
+    assert "octocat/hello-world" in payload["stages"][0]["input"]["prompt"]
+    assert "123" in payload["stages"][0]["input"]["prompt"]
+
+
+def test_job_create_template_from_gh_conflict_with_set_errors() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        job.app,
+        [
+            "create",
+            "--template",
+            "github_issue.v1",
+            "--template-file",
+            str(_template_fixture_path()),
+            "--from-gh",
+            "https://github.com/octocat/hello-world/issues/123",
+            "--set",
+            "issueNumber=9",
+            "--stage-payout-cents",
+            "1=1000",
+            "--stage-payout-cents",
+            "2=2000",
+            "--stage-payout-cents",
+            "3=2000",
+            "--dry-run",
+        ],
+        obj=_state(),
+    )
+
+    assert result.exit_code == 2
+    assert "--from-gh cannot be combined with --set/--set-json for:" in result.output
+    assert "issueNumber" in result.output
+
+
+def test_job_create_template_from_gh_requires_template_flag() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        job.app,
+        [
+            "create",
+            "--template-file",
+            str(_template_fixture_path()),
+            "--from-gh",
+            "https://github.com/octocat/hello-world/issues/123",
+            "--stage-payout-cents",
+            "1=1000",
+            "--stage-payout-cents",
+            "2=2000",
+            "--stage-payout-cents",
+            "3=2000",
+            "--dry-run",
+        ],
+        obj=_state(),
+    )
+
+    assert result.exit_code == 1
+    assert "--from-gh requires --template." in result.output
+
+
 def test_job_create_template_payout_cents_guidance_for_multi_stage() -> None:
     runner = CliRunner()
     result = runner.invoke(

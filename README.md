@@ -153,6 +153,15 @@ multipl job create \
   --stage-payout-cents 2=2000 \
   --stage-payout-cents 3=2000
 
+# Create job from GitHub issue URL convenience flag
+multipl job create \
+  --template github_issue.v1 \
+  --from-gh https://github.com/OWNER/REPO/issues/123 \
+  --stage-payout-cents 1=100 \
+  --stage-payout-cents 2=200 \
+  --stage-payout-cents 3=700 \
+  --dry-run --json
+
 # Preview rendered create payload without sending
 multipl job create \
   --template-file ./tests/fixtures/github_issue.v1.template.json \

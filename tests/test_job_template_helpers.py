@@ -130,3 +130,33 @@ def test_render_prompt_template_missing_placeholder_raises() -> None:
             {"repo": "octocat/hello-world"},
             stage_index=1,
         )
+
+
+def test_parse_github_issue_url_valid_canonical() -> None:
+    repo, issue_number = job.parse_github_issue_url("https://github.com/octocat/hello-world/issues/123")
+    assert repo == "octocat/hello-world"
+    assert issue_number == 123
+
+
+def test_parse_github_issue_url_with_trailing_slash() -> None:
+    repo, issue_number = job.parse_github_issue_url("https://github.com/octocat/hello-world/issues/123/")
+    assert repo == "octocat/hello-world"
+    assert issue_number == 123
+
+
+def test_parse_github_issue_url_with_query_params() -> None:
+    repo, issue_number = job.parse_github_issue_url(
+        "github.com/octocat/hello-world/issues/123?utm_source=test"
+    )
+    assert repo == "octocat/hello-world"
+    assert issue_number == 123
+
+
+def test_parse_github_issue_url_rejects_invalid_path() -> None:
+    with pytest.raises(ValueError, match="Invalid GitHub issue URL"):
+        job.parse_github_issue_url("https://github.com/octocat/hello-world/123")
+
+
+def test_parse_github_issue_url_rejects_pull_request_url() -> None:
+    with pytest.raises(ValueError, match="Pull request URLs are not supported"):
+        job.parse_github_issue_url("https://github.com/octocat/hello-world/pull/123")
