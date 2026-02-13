@@ -5,6 +5,7 @@ import re
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 import typer
@@ -154,6 +155,83 @@ def _parse_key_value_flag(raw: str, *, flag_name: str) -> tuple[str, str]:
     if not key:
         raise typer.BadParameter(f"Invalid {flag_name} value '{raw}'. Key cannot be empty.")
     return key, value
+
+
+def _collect_template_input_keys(
+    string_assignments: list[str],
+    json_assignments: list[str],
+) -> set[str]:
+    keys: set[str] = set()
+    for raw in string_assignments:
+        key, _ = _parse_key_value_flag(raw, flag_name="--set")
+        keys.add(key)
+    for raw in json_assignments:
+        key, _ = _parse_key_value_flag(raw, flag_name="--set-json")
+        keys.add(key)
+    return keys
+
+
+def _schema_prefers_exclusive_issue_reference(schema: dict[str, Any]) -> bool:
+    one_of = schema.get("oneOf")
+    if not isinstance(one_of, list):
+        return False
+
+    required_sets: set[frozenset[str]] = set()
+    for candidate in one_of:
+        if not isinstance(candidate, dict):
+            continue
+        required = candidate.get("required")
+        if not isinstance(required, list):
+            continue
+        required_sets.add(frozenset(str(value) for value in required))
+
+    return frozenset({"issueNumber"}) in required_sets and frozenset({"issueUrl"}) in required_sets
+
+
+def parse_github_issue_url(url: str) -> tuple[str, int]:
+    original = url.strip()
+    if not original:
+        raise ValueError("Invalid GitHub issue URL: \nExpected: https://github.com/OWNER/REPO/issues/123")
+
+    candidate = original
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", candidate):
+        candidate = f"https://{candidate}"
+
+    parsed = urlsplit(candidate)
+    host = parsed.netloc.lower()
+    if host != "github.com":
+        raise ValueError(
+            f"Invalid GitHub issue URL: {original}\n"
+            "Expected: https://github.com/OWNER/REPO/issues/123"
+        )
+
+    segments = [segment for segment in parsed.path.split("/") if segment]
+    if len(segments) != 4:
+        raise ValueError(
+            f"Invalid GitHub issue URL: {original}\n"
+            "Expected: https://github.com/OWNER/REPO/issues/123"
+        )
+
+    owner, repo, kind, number = segments
+    if kind != "issues":
+        if kind == "pull":
+            raise ValueError(
+                f"Invalid GitHub issue URL: {original}\n"
+                "Pull request URLs are not supported. "
+                "Expected: https://github.com/OWNER/REPO/issues/123"
+            )
+        raise ValueError(
+            f"Invalid GitHub issue URL: {original}\n"
+            "Expected: https://github.com/OWNER/REPO/issues/123"
+        )
+
+    if not number.isdigit() or int(number) <= 0:
+        raise ValueError(
+            f"Invalid GitHub issue URL: {original}\n"
+            "Expected: https://github.com/OWNER/REPO/issues/123"
+        )
+
+    return f"{owner}/{repo}", int(number)
 
 
 def _parse_template_input_flags(
@@ -916,6 +994,11 @@ def create_job(
         dir_okay=False,
         help="Load template payload from local file",
     ),
+    from_gh: str | None = typer.Option(
+        None,
+        "--from-gh",
+        help="GitHub issue URL (https://github.com/OWNER/REPO/issues/123)",
+    ),
     template_set: list[str] | None = typer.Option(
         None,
         "--set",
@@ -973,6 +1056,9 @@ def create_job(
 
     request_payload: dict[str, Any]
     if template_mode:
+        if from_gh is not None and template is None:
+            console.print("[red]--from-gh requires --template.[/red]")
+            raise typer.Exit(code=1)
         if request_file:
             console.print("[red]--request-file/--raw cannot be used with --template.[/red]")
             raise typer.Exit(code=1)
@@ -1000,12 +1086,33 @@ def create_job(
                 template_id=template,
             )
 
+        if from_gh is not None:
+            assigned_keys = _collect_template_input_keys(
+                template_set_values,
+                template_set_json_values,
+            )
+            conflicting_keys = sorted(assigned_keys.intersection({"repo", "issueNumber", "issueUrl"}))
+            if conflicting_keys:
+                conflict_text = ", ".join(conflicting_keys)
+                raise typer.BadParameter(
+                    f"--from-gh cannot be combined with --set/--set-json for: {conflict_text}."
+                )
+
         template_schema = template_payload.input_schema.to_dict()
         template_input = _parse_template_input_flags(
             template_set_values,
             template_set_json_values,
             schema=template_schema,
         )
+        if from_gh is not None:
+            try:
+                repo, issue_number = parse_github_issue_url(from_gh)
+            except ValueError as exc:
+                raise typer.BadParameter(str(exc)) from exc
+            template_input["repo"] = repo
+            template_input["issueNumber"] = issue_number
+            if not _schema_prefers_exclusive_issue_reference(template_schema):
+                template_input["issueUrl"] = from_gh
         _validate_template_input(template_input, template_schema)
 
         sorted_stages = sorted(template_payload.stages, key=lambda stage: stage.index)
