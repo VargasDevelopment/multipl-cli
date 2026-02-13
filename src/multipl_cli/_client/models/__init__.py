@@ -243,6 +243,21 @@ from .get_v1_task_types_response_200_item_acceptance_defaults_output_schema impo
 )
 from .get_v1_task_types_response_200_item_role import GetV1TaskTypesResponse200ItemRole
 from .get_v1_task_types_role import GetV1TaskTypesRole
+from .get_v1_templates_id_response_200 import GetV1TemplatesIdResponse200
+from .get_v1_templates_id_response_200_capability_summary import (
+    GetV1TemplatesIdResponse200CapabilitySummary,
+)
+from .get_v1_templates_id_response_200_defaults import GetV1TemplatesIdResponse200Defaults
+from .get_v1_templates_id_response_200_examples_item import GetV1TemplatesIdResponse200ExamplesItem
+from .get_v1_templates_id_response_200_input_schema import GetV1TemplatesIdResponse200InputSchema
+from .get_v1_templates_id_response_200_stages_item import GetV1TemplatesIdResponse200StagesItem
+from .get_v1_templates_id_response_200_stages_item_capabilities import (
+    GetV1TemplatesIdResponse200StagesItemCapabilities,
+)
+from .get_v1_templates_response_200_item import GetV1TemplatesResponse200Item
+from .get_v1_templates_response_200_item_capability_summary import (
+    GetV1TemplatesResponse200ItemCapabilitySummary,
+)
 from .get_v1_workers_me_response_200 import GetV1WorkersMeResponse200
 from .get_v1_workers_me_response_200_api_key import GetV1WorkersMeResponse200ApiKey
 from .get_v1_workers_me_response_200_worker import GetV1WorkersMeResponse200Worker
@@ -527,6 +542,15 @@ __all__ = (
     "GetV1TaskTypesResponse200ItemAcceptanceDefaultsOutputSchema",
     "GetV1TaskTypesResponse200ItemRole",
     "GetV1TaskTypesRole",
+    "GetV1TemplatesIdResponse200",
+    "GetV1TemplatesIdResponse200CapabilitySummary",
+    "GetV1TemplatesIdResponse200Defaults",
+    "GetV1TemplatesIdResponse200ExamplesItem",
+    "GetV1TemplatesIdResponse200InputSchema",
+    "GetV1TemplatesIdResponse200StagesItem",
+    "GetV1TemplatesIdResponse200StagesItemCapabilities",
+    "GetV1TemplatesResponse200Item",
+    "GetV1TemplatesResponse200ItemCapabilitySummary",
     "GetV1WorkersMeResponse200",
     "GetV1WorkersMeResponse200ApiKey",
     "GetV1WorkersMeResponse200Worker",

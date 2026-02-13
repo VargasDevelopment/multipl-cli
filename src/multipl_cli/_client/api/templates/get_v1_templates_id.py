@@ -6,38 +6,29 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.post_v1_jobs_job_id_review_body import PostV1JobsJobIdReviewBody
-from ...models.post_v1_jobs_job_id_review_response_200 import PostV1JobsJobIdReviewResponse200
+from ...models.get_v1_templates_id_response_200 import GetV1TemplatesIdResponse200
 from ...types import Response
 
 
 def _get_kwargs(
-    job_id: str,
-    *,
-    body: PostV1JobsJobIdReviewBody,
+    id: str,
 ) -> dict[str, Any]:
-    headers: dict[str, Any] = {}
 
     _kwargs: dict[str, Any] = {
-        "method": "post",
-        "url": "/v1/jobs/{job_id}/review".format(
-            job_id=quote(str(job_id), safe=""),
+        "method": "get",
+        "url": "/v1/templates/{id}".format(
+            id=quote(str(id), safe=""),
         ),
     }
 
-    _kwargs["json"] = body.to_dict()
-
-    headers["Content-Type"] = "application/json"
-
-    _kwargs["headers"] = headers
     return _kwargs
 
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> PostV1JobsJobIdReviewResponse200 | None:
+) -> GetV1TemplatesIdResponse200 | None:
     if response.status_code == 200:
-        response_200 = PostV1JobsJobIdReviewResponse200.from_dict(response.json())
+        response_200 = GetV1TemplatesIdResponse200.from_dict(response.json())
 
         return response_200
 
@@ -49,7 +40,7 @@ def _parse_response(
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[PostV1JobsJobIdReviewResponse200]:
+) -> Response[GetV1TemplatesIdResponse200]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -59,27 +50,24 @@ def _build_response(
 
 
 def sync_detailed(
-    job_id: str,
+    id: str,
     *,
     client: AuthenticatedClient,
-    body: PostV1JobsJobIdReviewBody,
-) -> Response[PostV1JobsJobIdReviewResponse200]:
+) -> Response[GetV1TemplatesIdResponse200]:
     """
     Args:
-        job_id (str):
-        body (PostV1JobsJobIdReviewBody):
+        id (str):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[PostV1JobsJobIdReviewResponse200]
+        Response[GetV1TemplatesIdResponse200]
     """
 
     kwargs = _get_kwargs(
-        job_id=job_id,
-        body=body,
+        id=id,
     )
 
     response = client.get_httpx_client().request(
@@ -90,53 +78,47 @@ def sync_detailed(
 
 
 def sync(
-    job_id: str,
+    id: str,
     *,
     client: AuthenticatedClient,
-    body: PostV1JobsJobIdReviewBody,
-) -> PostV1JobsJobIdReviewResponse200 | None:
+) -> GetV1TemplatesIdResponse200 | None:
     """
     Args:
-        job_id (str):
-        body (PostV1JobsJobIdReviewBody):
+        id (str):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        PostV1JobsJobIdReviewResponse200
+        GetV1TemplatesIdResponse200
     """
 
     return sync_detailed(
-        job_id=job_id,
+        id=id,
         client=client,
-        body=body,
     ).parsed
 
 
 async def asyncio_detailed(
-    job_id: str,
+    id: str,
     *,
     client: AuthenticatedClient,
-    body: PostV1JobsJobIdReviewBody,
-) -> Response[PostV1JobsJobIdReviewResponse200]:
+) -> Response[GetV1TemplatesIdResponse200]:
     """
     Args:
-        job_id (str):
-        body (PostV1JobsJobIdReviewBody):
+        id (str):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[PostV1JobsJobIdReviewResponse200]
+        Response[GetV1TemplatesIdResponse200]
     """
 
     kwargs = _get_kwargs(
-        job_id=job_id,
-        body=body,
+        id=id,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -145,28 +127,25 @@ async def asyncio_detailed(
 
 
 async def asyncio(
-    job_id: str,
+    id: str,
     *,
     client: AuthenticatedClient,
-    body: PostV1JobsJobIdReviewBody,
-) -> PostV1JobsJobIdReviewResponse200 | None:
+) -> GetV1TemplatesIdResponse200 | None:
     """
     Args:
-        job_id (str):
-        body (PostV1JobsJobIdReviewBody):
+        id (str):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        PostV1JobsJobIdReviewResponse200
+        GetV1TemplatesIdResponse200
     """
 
     return (
         await asyncio_detailed(
-            job_id=job_id,
+            id=id,
             client=client,
-            body=body,
         )
     ).parsed

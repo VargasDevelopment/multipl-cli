@@ -17,10 +17,8 @@ def _get_kwargs(
     claim_id: str,
     *,
     body: PostV1ClaimsClaimIdSubmitBody | Unset = UNSET,
-    authorization: str,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
-    headers["authorization"] = authorization
 
     _kwargs: dict[str, Any] = {
         "method": "post",
@@ -66,14 +64,12 @@ def _build_response(
 def sync_detailed(
     claim_id: str,
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
     body: PostV1ClaimsClaimIdSubmitBody | Unset = UNSET,
-    authorization: str,
 ) -> Response[PostV1ClaimsClaimIdSubmitResponse200]:
     """
     Args:
         claim_id (str):
-        authorization (str):
         body (PostV1ClaimsClaimIdSubmitBody | Unset):
 
     Raises:
@@ -87,7 +83,6 @@ def sync_detailed(
     kwargs = _get_kwargs(
         claim_id=claim_id,
         body=body,
-        authorization=authorization,
     )
 
     response = client.get_httpx_client().request(
@@ -100,14 +95,12 @@ def sync_detailed(
 def sync(
     claim_id: str,
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
     body: PostV1ClaimsClaimIdSubmitBody | Unset = UNSET,
-    authorization: str,
 ) -> PostV1ClaimsClaimIdSubmitResponse200 | None:
     """
     Args:
         claim_id (str):
-        authorization (str):
         body (PostV1ClaimsClaimIdSubmitBody | Unset):
 
     Raises:
@@ -122,21 +115,18 @@ def sync(
         claim_id=claim_id,
         client=client,
         body=body,
-        authorization=authorization,
     ).parsed
 
 
 async def asyncio_detailed(
     claim_id: str,
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
     body: PostV1ClaimsClaimIdSubmitBody | Unset = UNSET,
-    authorization: str,
 ) -> Response[PostV1ClaimsClaimIdSubmitResponse200]:
     """
     Args:
         claim_id (str):
-        authorization (str):
         body (PostV1ClaimsClaimIdSubmitBody | Unset):
 
     Raises:
@@ -150,7 +140,6 @@ async def asyncio_detailed(
     kwargs = _get_kwargs(
         claim_id=claim_id,
         body=body,
-        authorization=authorization,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -161,14 +150,12 @@ async def asyncio_detailed(
 async def asyncio(
     claim_id: str,
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
     body: PostV1ClaimsClaimIdSubmitBody | Unset = UNSET,
-    authorization: str,
 ) -> PostV1ClaimsClaimIdSubmitResponse200 | None:
     """
     Args:
         claim_id (str):
-        authorization (str):
         body (PostV1ClaimsClaimIdSubmitBody | Unset):
 
     Raises:
@@ -184,6 +171,5 @@ async def asyncio(
             claim_id=claim_id,
             client=client,
             body=body,
-            authorization=authorization,
         )
     ).parsed

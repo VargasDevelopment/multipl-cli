@@ -95,6 +95,10 @@ def _write_json(path: Path, payload: dict[str, Any]) -> Path:
     return path
 
 
+def _template_fixture_path() -> Path:
+    return Path(__file__).parent / "fixtures" / "github_issue.v1.template.json"
+
+
 def test_job_create_legacy_wraps_input_payload(monkeypatch, tmp_path: Path) -> None:
     calls: list[dict[str, Any]] = []
     response = _FakeHttpResponse(
@@ -242,3 +246,168 @@ def test_job_stages_calls_endpoint_and_renders_pipeline(monkeypatch) -> None:
     assert "root-stage-job" in result.stdout
     assert "plan" in result.stdout
     assert "proof" in result.stdout
+
+
+def test_job_create_template_dry_run_uses_local_fixture(tmp_path: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        job.app,
+        [
+            "create",
+            "--template-file",
+            str(_template_fixture_path()),
+            "--set",
+            "repo=octocat/hello-world",
+            "--set",
+            "issueNumber=42",
+            "--stage-payout-cents",
+            "1=1000",
+            "--stage-payout-cents",
+            "2=2000",
+            "--stage-payout-cents",
+            "3=2000",
+            "--dry-run",
+            "--json",
+        ],
+        obj=_state(),
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["taskType"] == "research.v1"
+    assert payload["input"]["repo"] == "octocat/hello-world"
+    assert payload["input"]["issueNumber"] == 42
+    stages = payload["stages"]
+    assert [stage["stageIndex"] for stage in stages] == [1, 2, 3]
+    assert [stage["taskType"] for stage in stages] == ["research.v1", "extract.v1", "custom.v1"]
+    assert [stage["payoutCents"] for stage in stages] == [1000, 2000, 2000]
+    assert "octocat/hello-world" in stages[0]["input"]["prompt"]
+    assert "42" in stages[0]["input"]["prompt"]
+    assert "octocat/hello-world" in stages[1]["input"]["prompt"]
+    assert "42" in stages[2]["input"]["prompt"]
+
+
+def test_job_create_template_dry_run_set_boolean_coercion() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        job.app,
+        [
+            "create",
+            "--template-file",
+            str(_template_fixture_path()),
+            "--set",
+            "repo=octocat/hello-world",
+            "--set",
+            "issueNumber=42",
+            "--set",
+            "prEnabled=true",
+            "--stage-payout-cents",
+            "1=1000",
+            "--stage-payout-cents",
+            "2=2000",
+            "--stage-payout-cents",
+            "3=2000",
+            "--dry-run",
+            "--json",
+        ],
+        obj=_state(),
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["input"]["prEnabled"] is True
+    assert payload["stages"][0]["input"]["prEnabled"] is True
+
+
+def test_job_create_template_set_integer_type_error_suggests_set_json() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        job.app,
+        [
+            "create",
+            "--template-file",
+            str(_template_fixture_path()),
+            "--set",
+            "repo=octocat/hello-world",
+            "--set",
+            "issueNumber=abc",
+            "--stage-payout-cents",
+            "1=1000",
+            "--stage-payout-cents",
+            "2=2000",
+            "--stage-payout-cents",
+            "3=2000",
+            "--dry-run",
+        ],
+        obj=_state(),
+    )
+
+    assert result.exit_code == 2
+
+
+def test_job_create_template_payout_cents_guidance_for_multi_stage() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        job.app,
+        [
+            "create",
+            "--template-file",
+            str(_template_fixture_path()),
+            "--set",
+            "repo=octocat/hello-world",
+            "--set-json",
+            "issueNumber=42",
+            "--payout-cents",
+            "5000",
+            "--dry-run",
+        ],
+        obj=_state(),
+    )
+
+    assert result.exit_code == 1
+    assert "Multi-stage jobs require explicit stage payouts." in result.stdout
+    assert "You provided --payout-cents 5000." in result.stdout
+    assert "--stage-payout-cents 1=1000" in result.stdout
+    assert "--stage-payout-cents 2=2000" in result.stdout
+    assert "3=2000" in result.stdout
+
+
+def test_job_create_template_fetch_mock(monkeypatch) -> None:
+    fixture_payload = json.loads(_template_fixture_path().read_text())
+    parsed_template = job.GetV1TemplatesIdResponse200.from_dict(fixture_payload)
+
+    monkeypatch.setattr(job, "ensure_client_available", lambda: None)
+    monkeypatch.setattr(job, "build_client", lambda _base_url, api_key=None: object())
+
+    def fake_get_template_by_id(*, id: str, client):
+        assert id == "github_issue.v1"
+        return _FakeDetailedResponse(status_code=200, parsed=parsed_template)
+
+    monkeypatch.setattr(job, "get_template_by_id", fake_get_template_by_id)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        job.app,
+        [
+            "create",
+            "--template",
+            "github_issue.v1",
+            "--set",
+            "repo=octocat/hello-world",
+            "--set-json",
+            "issueNumber=8",
+            "--stage-payout-cents",
+            "1=1000",
+            "--stage-payout-cents",
+            "2=2000",
+            "--stage-payout-cents",
+            "3=2000",
+            "--dry-run",
+            "--json",
+        ],
+        obj=_state(),
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.stdout)
+    assert payload["stages"][0]["input"]["prompt"].startswith("Plan changes for octocat/hello-world")

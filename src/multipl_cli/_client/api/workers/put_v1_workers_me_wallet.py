@@ -13,10 +13,8 @@ from ...types import Response
 def _get_kwargs(
     *,
     body: PutV1WorkersMeWalletBody,
-    authorization: str,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
-    headers["authorization"] = authorization
 
     _kwargs: dict[str, Any] = {
         "method": "put",
@@ -58,13 +56,11 @@ def _build_response(
 
 def sync_detailed(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
     body: PutV1WorkersMeWalletBody,
-    authorization: str,
 ) -> Response[PutV1WorkersMeWalletResponse200]:
     """
     Args:
-        authorization (str):
         body (PutV1WorkersMeWalletBody):
 
     Raises:
@@ -77,7 +73,6 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         body=body,
-        authorization=authorization,
     )
 
     response = client.get_httpx_client().request(
@@ -89,13 +84,11 @@ def sync_detailed(
 
 def sync(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
     body: PutV1WorkersMeWalletBody,
-    authorization: str,
 ) -> PutV1WorkersMeWalletResponse200 | None:
     """
     Args:
-        authorization (str):
         body (PutV1WorkersMeWalletBody):
 
     Raises:
@@ -109,19 +102,16 @@ def sync(
     return sync_detailed(
         client=client,
         body=body,
-        authorization=authorization,
     ).parsed
 
 
 async def asyncio_detailed(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
     body: PutV1WorkersMeWalletBody,
-    authorization: str,
 ) -> Response[PutV1WorkersMeWalletResponse200]:
     """
     Args:
-        authorization (str):
         body (PutV1WorkersMeWalletBody):
 
     Raises:
@@ -134,7 +124,6 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         body=body,
-        authorization=authorization,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -144,13 +133,11 @@ async def asyncio_detailed(
 
 async def asyncio(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
     body: PutV1WorkersMeWalletBody,
-    authorization: str,
 ) -> PutV1WorkersMeWalletResponse200 | None:
     """
     Args:
-        authorization (str):
         body (PutV1WorkersMeWalletBody):
 
     Raises:
@@ -165,6 +152,5 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             body=body,
-            authorization=authorization,
         )
     ).parsed

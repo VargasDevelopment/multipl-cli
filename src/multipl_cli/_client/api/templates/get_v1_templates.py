@@ -1,43 +1,34 @@
 from http import HTTPStatus
 from typing import Any
-from urllib.parse import quote
 
 import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
-from ...models.post_v1_jobs_job_id_review_body import PostV1JobsJobIdReviewBody
-from ...models.post_v1_jobs_job_id_review_response_200 import PostV1JobsJobIdReviewResponse200
+from ...models.get_v1_templates_response_200_item import GetV1TemplatesResponse200Item
 from ...types import Response
 
 
-def _get_kwargs(
-    job_id: str,
-    *,
-    body: PostV1JobsJobIdReviewBody,
-) -> dict[str, Any]:
-    headers: dict[str, Any] = {}
+def _get_kwargs() -> dict[str, Any]:
 
     _kwargs: dict[str, Any] = {
-        "method": "post",
-        "url": "/v1/jobs/{job_id}/review".format(
-            job_id=quote(str(job_id), safe=""),
-        ),
+        "method": "get",
+        "url": "/v1/templates",
     }
 
-    _kwargs["json"] = body.to_dict()
-
-    headers["Content-Type"] = "application/json"
-
-    _kwargs["headers"] = headers
     return _kwargs
 
 
 def _parse_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> PostV1JobsJobIdReviewResponse200 | None:
+) -> list[GetV1TemplatesResponse200Item] | None:
     if response.status_code == 200:
-        response_200 = PostV1JobsJobIdReviewResponse200.from_dict(response.json())
+        response_200 = []
+        _response_200 = response.json()
+        for response_200_item_data in _response_200:
+            response_200_item = GetV1TemplatesResponse200Item.from_dict(response_200_item_data)
+
+            response_200.append(response_200_item)
 
         return response_200
 
@@ -49,7 +40,7 @@ def _parse_response(
 
 def _build_response(
     *, client: AuthenticatedClient | Client, response: httpx.Response
-) -> Response[PostV1JobsJobIdReviewResponse200]:
+) -> Response[list[GetV1TemplatesResponse200Item]]:
     return Response(
         status_code=HTTPStatus(response.status_code),
         content=response.content,
@@ -59,28 +50,19 @@ def _build_response(
 
 
 def sync_detailed(
-    job_id: str,
     *,
     client: AuthenticatedClient,
-    body: PostV1JobsJobIdReviewBody,
-) -> Response[PostV1JobsJobIdReviewResponse200]:
+) -> Response[list[GetV1TemplatesResponse200Item]]:
     """
-    Args:
-        job_id (str):
-        body (PostV1JobsJobIdReviewBody):
-
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[PostV1JobsJobIdReviewResponse200]
+        Response[list[GetV1TemplatesResponse200Item]]
     """
 
-    kwargs = _get_kwargs(
-        job_id=job_id,
-        body=body,
-    )
+    kwargs = _get_kwargs()
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -90,54 +72,37 @@ def sync_detailed(
 
 
 def sync(
-    job_id: str,
     *,
     client: AuthenticatedClient,
-    body: PostV1JobsJobIdReviewBody,
-) -> PostV1JobsJobIdReviewResponse200 | None:
+) -> list[GetV1TemplatesResponse200Item] | None:
     """
-    Args:
-        job_id (str):
-        body (PostV1JobsJobIdReviewBody):
-
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        PostV1JobsJobIdReviewResponse200
+        list[GetV1TemplatesResponse200Item]
     """
 
     return sync_detailed(
-        job_id=job_id,
         client=client,
-        body=body,
     ).parsed
 
 
 async def asyncio_detailed(
-    job_id: str,
     *,
     client: AuthenticatedClient,
-    body: PostV1JobsJobIdReviewBody,
-) -> Response[PostV1JobsJobIdReviewResponse200]:
+) -> Response[list[GetV1TemplatesResponse200Item]]:
     """
-    Args:
-        job_id (str):
-        body (PostV1JobsJobIdReviewBody):
-
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        Response[PostV1JobsJobIdReviewResponse200]
+        Response[list[GetV1TemplatesResponse200Item]]
     """
 
-    kwargs = _get_kwargs(
-        job_id=job_id,
-        body=body,
-    )
+    kwargs = _get_kwargs()
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
@@ -145,28 +110,20 @@ async def asyncio_detailed(
 
 
 async def asyncio(
-    job_id: str,
     *,
     client: AuthenticatedClient,
-    body: PostV1JobsJobIdReviewBody,
-) -> PostV1JobsJobIdReviewResponse200 | None:
+) -> list[GetV1TemplatesResponse200Item] | None:
     """
-    Args:
-        job_id (str):
-        body (PostV1JobsJobIdReviewBody):
-
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
 
     Returns:
-        PostV1JobsJobIdReviewResponse200
+        list[GetV1TemplatesResponse200Item]
     """
 
     return (
         await asyncio_detailed(
-            job_id=job_id,
             client=client,
-            body=body,
         )
     ).parsed

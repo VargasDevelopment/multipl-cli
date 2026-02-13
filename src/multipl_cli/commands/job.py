@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from pathlib import Path
 from typing import Any
 
 import httpx
 import typer
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError
 from rich.table import Table
 
 from multipl_cli._client.api.jobs.get_v1_jobs import sync_detailed as list_lane_jobs
@@ -24,7 +27,19 @@ from multipl_cli._client.api.public.get_v1_public_jobs import sync_detailed as l
 from multipl_cli._client.api.public.get_v_1_public_jobs_job_id import (
     sync_detailed as get_public_job,
 )
+from multipl_cli._client.api.templates.get_v1_templates_id import (
+    sync_detailed as get_template_by_id,
+)
 from multipl_cli._client.models.get_v1_jobs_lane import GetV1JobsLane
+from multipl_cli._client.models.get_v1_templates_id_response_200 import (
+    GetV1TemplatesIdResponse200,
+)
+from multipl_cli._client.models.post_v1_jobs_body import PostV1JobsBody
+from multipl_cli._client.models.post_v1_jobs_body_input import PostV1JobsBodyInput
+from multipl_cli._client.models.post_v1_jobs_body_stages_item import PostV1JobsBodyStagesItem
+from multipl_cli._client.models.post_v1_jobs_body_stages_item_input import (
+    PostV1JobsBodyStagesItemInput,
+)
 from multipl_cli._client.models.post_v1_jobs_job_id_review_body import (
     PostV1JobsJobIdReviewBody,
 )
@@ -53,6 +68,9 @@ CREATE_JOB_REQUEST_HINT_KEYS = {
     "requestedModel",
     "estimatedTokens",
 }
+PLACEHOLDER_RE = re.compile(r"{{\s*([A-Za-z_][A-Za-z0-9_]*)\s*}}")
+INTEGER_RE = re.compile(r"^-?\d+$")
+NUMBER_RE = re.compile(r"^-?\d+(\.\d+)?$")
 
 
 def _load_json(path: Path) -> dict:
@@ -126,6 +144,322 @@ def _apply_create_job_overrides(
         request_payload["payoutCents"] = payout_cents
     if job_ttl_seconds is not None:
         request_payload["jobTtlSeconds"] = job_ttl_seconds
+
+
+def _parse_key_value_flag(raw: str, *, flag_name: str) -> tuple[str, str]:
+    key, sep, value = raw.partition("=")
+    if not sep:
+        raise typer.BadParameter(f"Invalid {flag_name} value '{raw}'. Expected KEY=VALUE.")
+    key = key.strip()
+    if not key:
+        raise typer.BadParameter(f"Invalid {flag_name} value '{raw}'. Key cannot be empty.")
+    return key, value
+
+
+def _parse_template_input_flags(
+    string_assignments: list[str],
+    json_assignments: list[str],
+    *,
+    schema: dict[str, Any],
+) -> dict[str, Any]:
+    def coerce_scalar_value(key: str, value: str) -> Any:
+        schema_type = _resolve_schema_property_type(schema, key)
+        if schema_type == "integer" and INTEGER_RE.fullmatch(value):
+            return int(value)
+        if schema_type == "number" and NUMBER_RE.fullmatch(value):
+            return float(value)
+        if schema_type == "boolean":
+            normalized = value.lower()
+            if normalized == "true":
+                return True
+            if normalized == "false":
+                return False
+        return value
+
+    payload: dict[str, Any] = {}
+    for raw in string_assignments:
+        key, value = _parse_key_value_flag(raw, flag_name="--set")
+        if key in payload:
+            raise typer.BadParameter(f"Duplicate template input key '{key}'.")
+        payload[key] = coerce_scalar_value(key, value)
+
+    for raw in json_assignments:
+        key, value = _parse_key_value_flag(raw, flag_name="--set-json")
+        if key in payload:
+            raise typer.BadParameter(f"Duplicate template input key '{key}'.")
+        try:
+            payload[key] = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise typer.BadParameter(
+                f"Invalid JSON for --set-json {key}: {exc.msg} (at char {exc.pos})."
+            ) from exc
+
+    return payload
+
+
+def _resolve_schema_property_type(schema: dict[str, Any], key: str) -> str | None:
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return None
+    property_schema = properties.get(key)
+    if not isinstance(property_schema, dict):
+        return None
+    property_type = property_schema.get("type")
+    if isinstance(property_type, str):
+        return property_type
+    if (
+        isinstance(property_type, list)
+        and len(property_type) == 1
+        and isinstance(property_type[0], str)
+    ):
+        return property_type[0]
+    return None
+
+
+def _format_validation_path(path: Any) -> str:
+    if not path:
+        return "(root)"
+    tokens = [str(part) for part in path]
+    return ".".join(tokens)
+
+
+def _format_validation_error(error: ValidationError) -> list[str]:
+    lines = [f"{_format_validation_path(error.path)}: {error.message}"]
+    for sub_error in error.context:
+        lines.append(f"{_format_validation_path(sub_error.path)}: {sub_error.message}")
+    return lines
+
+
+def _validate_template_input(input_payload: dict[str, Any], schema: dict[str, Any]) -> None:
+    def collect_scalar_type_hints(error: ValidationError) -> list[str]:
+        hints: list[str] = []
+        if error.validator == "type":
+            field_name = str(error.path[0]) if error.path else None
+            expected_type = error.validator_value
+            expected_type_name = (
+                expected_type
+                if isinstance(expected_type, str)
+                else expected_type[0]
+                if isinstance(expected_type, list) and len(expected_type) == 1
+                else None
+            )
+            if field_name and expected_type_name in {"integer", "number", "boolean"}:
+                hints.append(
+                    f"Tip for '{field_name}': pass exact typing via --set-json "
+                    f"{field_name}={json.dumps(input_payload.get(field_name))}"
+                )
+        for sub_error in error.context:
+            hints.extend(collect_scalar_type_hints(sub_error))
+        return hints
+
+    validator = Draft202012Validator(schema)
+    errors = sorted(validator.iter_errors(input_payload), key=lambda err: tuple(str(part) for part in err.path))
+    if not errors:
+        return
+
+    details: list[str] = []
+    for error in errors:
+        details.extend(_format_validation_error(error))
+    hint_lines = sorted(set(hint for error in errors for hint in collect_scalar_type_hints(error)))
+    detail_lines = "\n".join(f"  - {line}" for line in details)
+    if hint_lines:
+        hints = "\n".join(f"  - {line}" for line in hint_lines)
+        raise typer.BadParameter(f"Template input validation failed:\n{detail_lines}\n{hints}")
+    raise typer.BadParameter(f"Template input validation failed:\n{detail_lines}")
+
+
+def _value_to_prompt_string(value: Any) -> str:
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True)
+    return str(value)
+
+
+def _render_prompt_template(prompt_template: str, template_input: dict[str, Any], *, stage_index: int) -> str:
+    missing_keys: set[str] = set()
+
+    def replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key not in template_input:
+            missing_keys.add(key)
+            return match.group(0)
+        return _value_to_prompt_string(template_input[key])
+
+    rendered = PLACEHOLDER_RE.sub(replace, prompt_template)
+    if missing_keys:
+        missing = ", ".join(sorted(missing_keys))
+        raise typer.BadParameter(
+            f"Template stage {stage_index} is missing placeholder values for: {missing}."
+        )
+    return rendered
+
+
+def _parse_stage_payout_mappings(values: list[str]) -> dict[int, int]:
+    payouts: dict[int, int] = {}
+    for raw in values:
+        stage_str, payout_str = _parse_key_value_flag(raw, flag_name="--stage-payout-cents")
+        try:
+            stage_index = int(stage_str)
+        except ValueError as exc:
+            raise typer.BadParameter(
+                f"Invalid stage index '{stage_str}' in --stage-payout-cents '{raw}'."
+            ) from exc
+        if stage_index < 1:
+            raise typer.BadParameter(
+                f"Invalid stage index '{stage_index}' in --stage-payout-cents '{raw}'. "
+                "Stage indices are 1-indexed."
+            )
+
+        try:
+            payout_cents = int(payout_str)
+        except ValueError as exc:
+            raise typer.BadParameter(
+                f"Invalid payout value '{payout_str}' in --stage-payout-cents '{raw}'."
+            ) from exc
+        if payout_cents < 0:
+            raise typer.BadParameter(
+                f"Invalid payout value '{payout_cents}' in --stage-payout-cents '{raw}'."
+            )
+
+        if stage_index in payouts:
+            raise typer.BadParameter(
+                f"Duplicate --stage-payout-cents mapping for stage {stage_index}."
+            )
+        payouts[stage_index] = payout_cents
+    return payouts
+
+
+def _multi_stage_payout_guidance(stage_count: int) -> str:
+    if stage_count == 3:
+        return (
+            "--stage-payout-cents 1=1000 "
+            "--stage-payout-cents 2=2000 "
+            "--stage-payout-cents 3=2000"
+        )
+    return " ".join(
+        f"--stage-payout-cents {stage_index}=1000"
+        for stage_index in range(1, stage_count + 1)
+    )
+
+
+def _resolve_template_stage_payouts(
+    *,
+    stage_indices: list[int],
+    mapped_stage_payouts: dict[int, int],
+    payout_cents: int | None,
+) -> dict[int, int]:
+    expected = set(stage_indices)
+    provided = set(mapped_stage_payouts.keys())
+    unexpected = sorted(provided - expected)
+    if unexpected:
+        unexpected_text = ", ".join(str(stage_index) for stage_index in unexpected)
+        raise typer.BadParameter(
+            f"--stage-payout-cents provided unknown stage indices: {unexpected_text}."
+        )
+
+    if len(stage_indices) > 1:
+        if payout_cents is not None:
+            guidance = _multi_stage_payout_guidance(len(stage_indices))
+            console.print("[red]Multi-stage jobs require explicit stage payouts.[/red]")
+            console.print(f"You provided --payout-cents {payout_cents}.")
+            console.print(f"Template stage count: {len(stage_indices)}")
+            console.print("Example:")
+            console.print(f"  {guidance}")
+            raise typer.Exit(code=1)
+
+        missing = [stage_index for stage_index in stage_indices if stage_index not in mapped_stage_payouts]
+        if missing:
+            missing_text = ", ".join(str(stage_index) for stage_index in missing)
+            raise typer.BadParameter(
+                f"Missing --stage-payout-cents for stage indices: {missing_text}."
+            )
+        return {stage_index: mapped_stage_payouts[stage_index] for stage_index in stage_indices}
+
+    only_stage = stage_indices[0]
+    if only_stage in mapped_stage_payouts:
+        if payout_cents is not None and mapped_stage_payouts[only_stage] != payout_cents:
+            raise typer.BadParameter(
+                "Conflicting payouts: --payout-cents does not match --stage-payout-cents 1=..."
+            )
+        return {only_stage: mapped_stage_payouts[only_stage]}
+    if payout_cents is None:
+        raise typer.BadParameter(
+            "Single-stage templates require --payout-cents or --stage-payout-cents 1=<cents>."
+        )
+    return {only_stage: payout_cents}
+
+
+def _render_template_create_request(
+    *,
+    template: GetV1TemplatesIdResponse200,
+    template_input: dict[str, Any],
+    stage_payouts: dict[int, int],
+) -> dict[str, Any]:
+    sorted_stages = sorted(template.stages, key=lambda stage: stage.index)
+    stage_models: list[PostV1JobsBodyStagesItem] = []
+    for stage in sorted_stages:
+        prompt = _render_prompt_template(
+            stage.prompt_template,
+            template_input,
+            stage_index=stage.index,
+        )
+        stage_input_payload: dict[str, Any] = {
+            **template_input,
+            "prompt": prompt,
+            "templateId": template.id,
+            "templateStageIndex": stage.index,
+            "templateStageTitle": stage.title,
+        }
+        stage_models.append(
+            PostV1JobsBodyStagesItem(
+                stage_id=f"stage_{stage.index}",
+                stage_index=stage.index,
+                name=stage.title,
+                task_type=stage.task_type_id,
+                payout_cents=stage_payouts[stage.index],
+                input_=PostV1JobsBodyStagesItemInput.from_dict(stage_input_payload),
+            )
+        )
+
+    request_body = PostV1JobsBody(
+        task_type=sorted_stages[0].task_type_id,
+        input_=PostV1JobsBodyInput.from_dict(dict(template_input)),
+        stages=stage_models,
+    )
+    return request_body.to_dict()
+
+
+def _load_template_from_file(template_file: Path) -> GetV1TemplatesIdResponse200:
+    payload = _load_json(template_file)
+    try:
+        return GetV1TemplatesIdResponse200.from_dict(payload)
+    except Exception as exc:
+        raise typer.BadParameter(f"Invalid template file: {exc}") from exc
+
+
+def _fetch_template_from_api(*, base_url: str, poster_api_key: str, template_id: str) -> GetV1TemplatesIdResponse200:
+    client = build_client(base_url, api_key=poster_api_key)
+    response = get_template_by_id(id=template_id, client=client)
+    if response.status_code == 200 and response.parsed is not None:
+        return response.parsed
+
+    if response.status_code == 404:
+        console.print(f"[red]Unknown template id '{template_id}'.[/red]")
+        raise typer.Exit(code=1)
+
+    if response.status_code in {401, 403}:
+        console.print("[red]Poster key required or invalid key.[/red]")
+        body = _parse_response_json(response)
+        if body is not None:
+            console.print(body)
+        raise typer.Exit(code=2)
+
+    console.print(
+        f"[red]Failed to fetch template '{template_id}' (status={response.status_code}).[/red]"
+    )
+    body = _parse_response_json(response)
+    if body is not None:
+        console.print(body)
+    raise typer.Exit(code=2)
 
 
 def _review_job(
@@ -567,13 +901,37 @@ def get_job_stages_cmd(
 def create_job(
     ctx: typer.Context,
     task_type: str | None = typer.Option(None, "--task-type", help="Task type override"),
-    input_file: Path = typer.Option(
-        ...,
+    input_file: Path | None = typer.Option(
+        None,
         "--input-file",
         exists=True,
         dir_okay=False,
         help="Legacy input JSON or full create request JSON",
     ),
+    template: str | None = typer.Option(None, "--template", help="Template id"),
+    template_file: Path | None = typer.Option(
+        None,
+        "--template-file",
+        exists=True,
+        dir_okay=False,
+        help="Load template payload from local file",
+    ),
+    template_set: list[str] | None = typer.Option(
+        None,
+        "--set",
+        help="Template variable mapping (KEY=VALUE)",
+    ),
+    template_set_json: list[str] | None = typer.Option(
+        None,
+        "--set-json",
+        help="Template variable mapping (KEY=JSON)",
+    ),
+    stage_payout_cents: list[str] | None = typer.Option(
+        None,
+        "--stage-payout-cents",
+        help='Stage payout mapping like "1=1000"',
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Print create request JSON and exit"),
     request_file: bool = typer.Option(
         False,
         "--request-file",
@@ -607,6 +965,129 @@ def create_job(
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
+    template_set_values = template_set or []
+    template_set_json_values = template_set_json or []
+    stage_payout_values = stage_payout_cents or []
+    acceptance_payload = _load_json(acceptance_file) if acceptance_file else None
+    template_mode = template is not None or template_file is not None
+
+    request_payload: dict[str, Any]
+    if template_mode:
+        if request_file:
+            console.print("[red]--request-file/--raw cannot be used with --template.[/red]")
+            raise typer.Exit(code=1)
+        if input_file is not None:
+            console.print("[red]--input-file cannot be used with --template.[/red]")
+            raise typer.Exit(code=1)
+        if task_type is not None:
+            console.print("[red]--task-type cannot be used with --template.[/red]")
+            raise typer.Exit(code=1)
+
+        if template_file is not None:
+            template_payload = _load_template_from_file(template_file)
+            if template is not None and template_payload.id != template:
+                console.print(
+                    f"[red]Template id mismatch: --template {template} != {template_payload.id} in --template-file.[/red]"
+                )
+                raise typer.Exit(code=1)
+        else:
+            if template is None:
+                console.print("[red]--template is required when --template-file is not provided.[/red]")
+                raise typer.Exit(code=1)
+            template_payload = _fetch_template_from_api(
+                base_url=state.base_url,
+                poster_api_key=profile.poster_api_key,
+                template_id=template,
+            )
+
+        template_schema = template_payload.input_schema.to_dict()
+        template_input = _parse_template_input_flags(
+            template_set_values,
+            template_set_json_values,
+            schema=template_schema,
+        )
+        _validate_template_input(template_input, template_schema)
+
+        sorted_stages = sorted(template_payload.stages, key=lambda stage: stage.index)
+        stage_indices = [stage.index for stage in sorted_stages]
+        stage_payout_map = _parse_stage_payout_mappings(stage_payout_values)
+        resolved_stage_payouts = _resolve_template_stage_payouts(
+            stage_indices=stage_indices,
+            mapped_stage_payouts=stage_payout_map,
+            payout_cents=payout_cents,
+        )
+
+        request_payload = _render_template_create_request(
+            template=template_payload,
+            template_input=template_input,
+            stage_payouts=resolved_stage_payouts,
+        )
+        _apply_create_job_overrides(
+            request_payload,
+            task_type=None,
+            acceptance_payload=acceptance_payload,
+            requested_model=requested_model,
+            estimated_tokens=estimated_tokens,
+            deadline_seconds=deadline_seconds,
+            payout_cents=None,
+            job_ttl_seconds=job_ttl_seconds,
+            json_output=json_output,
+        )
+    else:
+        if template_set_values or template_set_json_values or stage_payout_values:
+            console.print(
+                "[red]--set/--set-json/--stage-payout-cents require --template or --template-file.[/red]"
+            )
+            raise typer.Exit(code=1)
+        if input_file is None:
+            console.print("[red]--input-file is required unless --template is provided.[/red]")
+            raise typer.Exit(code=1)
+
+        input_payload = _load_json(input_file)
+        full_request_mode = request_file or _looks_like_create_job_request(input_payload)
+        if full_request_mode:
+            request_payload = dict(input_payload)
+            if "stages" in input_payload and not request_file and not json_output:
+                console.print(
+                    "[yellow]Detected top-level stages in --input-file; sending full create request.[/yellow]"
+                )
+        else:
+            if task_type is None:
+                console.print(
+                    "[red]--task-type is required when --input-file is legacy input-only JSON.[/red]"
+                )
+                raise typer.Exit(code=1)
+            request_payload = {
+                "taskType": task_type,
+                "input": input_payload,
+            }
+
+        _apply_create_job_overrides(
+            request_payload,
+            task_type=task_type,
+            acceptance_payload=acceptance_payload,
+            requested_model=requested_model,
+            estimated_tokens=estimated_tokens,
+            deadline_seconds=deadline_seconds,
+            payout_cents=payout_cents,
+            job_ttl_seconds=job_ttl_seconds,
+            json_output=json_output,
+        )
+
+    task_type_in_payload = request_payload.get("taskType")
+    if not isinstance(task_type_in_payload, str) or not task_type_in_payload.strip():
+        console.print("[red]Create request must include taskType (file or --task-type).[/red]")
+        raise typer.Exit(code=1)
+
+    input_in_payload = request_payload.get("input")
+    if not isinstance(input_in_payload, dict):
+        console.print("[red]Create request must include an object input payload.[/red]")
+        raise typer.Exit(code=1)
+
+    if dry_run:
+        console.print_json(data=request_payload)
+        return
+
     if proof and proof_file:
         console.print("[red]Use only one of --proof or --proof-file.[/red]")
         raise typer.Exit(code=1)
@@ -630,49 +1111,6 @@ def create_job(
         payer = CdpPayer()
     else:
         payer = ManualPayer(proof=None)
-
-    input_payload = _load_json(input_file)
-    acceptance_payload = _load_json(acceptance_file) if acceptance_file else None
-
-    full_request_mode = request_file or _looks_like_create_job_request(input_payload)
-    if full_request_mode:
-        request_payload = dict(input_payload)
-        if "stages" in input_payload and not request_file and not json_output:
-            console.print(
-                "[yellow]Detected top-level stages in --input-file; sending full create request.[/yellow]"
-            )
-    else:
-        if task_type is None:
-            console.print(
-                "[red]--task-type is required when --input-file is legacy input-only JSON.[/red]"
-            )
-            raise typer.Exit(code=1)
-        request_payload = {
-            "taskType": task_type,
-            "input": input_payload,
-        }
-
-    _apply_create_job_overrides(
-        request_payload,
-        task_type=task_type,
-        acceptance_payload=acceptance_payload,
-        requested_model=requested_model,
-        estimated_tokens=estimated_tokens,
-        deadline_seconds=deadline_seconds,
-        payout_cents=payout_cents,
-        job_ttl_seconds=job_ttl_seconds,
-        json_output=json_output,
-    )
-
-    task_type_in_payload = request_payload.get("taskType")
-    if not isinstance(task_type_in_payload, str) or not task_type_in_payload.strip():
-        console.print("[red]Create request must include taskType (file or --task-type).[/red]")
-        raise typer.Exit(code=1)
-
-    input_in_payload = request_payload.get("input")
-    if not isinstance(input_in_payload, dict):
-        console.print("[red]Create request must include an object input payload.[/red]")
-        raise typer.Exit(code=1)
 
     if not idempotency_key:
         idempotency_key = str(uuid.uuid4())
