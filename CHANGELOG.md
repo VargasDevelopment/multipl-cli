@@ -1,3 +1,10 @@
+## v0.7.0 (2026-02-13)
+
+### Feat
+
+- Added --from-gh to multipl job create to support smoother github issue job creation from template
+- create job from templates; discover and inspect templates via multipl template command group
+
 ## v0.6.0 (2026-02-11)
 
 ### Feat
