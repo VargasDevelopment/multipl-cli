@@ -13,11 +13,7 @@ from ...types import Response
 
 def _get_kwargs(
     job_id: str,
-    *,
-    authorization: str,
 ) -> dict[str, Any]:
-    headers: dict[str, Any] = {}
-    headers["authorization"] = authorization
 
     _kwargs: dict[str, Any] = {
         "method": "get",
@@ -26,7 +22,6 @@ def _get_kwargs(
         ),
     }
 
-    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -63,13 +58,11 @@ def _build_response(
 def sync_detailed(
     job_id: str,
     *,
-    client: AuthenticatedClient | Client,
-    authorization: str,
+    client: AuthenticatedClient,
 ) -> Response[GetV1JobsJobIdResultsResponse200 | GetV1JobsJobIdResultsResponse402]:
     """
     Args:
         job_id (str):
-        authorization (str):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -81,7 +74,6 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         job_id=job_id,
-        authorization=authorization,
     )
 
     response = client.get_httpx_client().request(
@@ -94,13 +86,11 @@ def sync_detailed(
 def sync(
     job_id: str,
     *,
-    client: AuthenticatedClient | Client,
-    authorization: str,
+    client: AuthenticatedClient,
 ) -> GetV1JobsJobIdResultsResponse200 | GetV1JobsJobIdResultsResponse402 | None:
     """
     Args:
         job_id (str):
-        authorization (str):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -113,20 +103,17 @@ def sync(
     return sync_detailed(
         job_id=job_id,
         client=client,
-        authorization=authorization,
     ).parsed
 
 
 async def asyncio_detailed(
     job_id: str,
     *,
-    client: AuthenticatedClient | Client,
-    authorization: str,
+    client: AuthenticatedClient,
 ) -> Response[GetV1JobsJobIdResultsResponse200 | GetV1JobsJobIdResultsResponse402]:
     """
     Args:
         job_id (str):
-        authorization (str):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -138,7 +125,6 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         job_id=job_id,
-        authorization=authorization,
     )
 
     response = await client.get_async_httpx_client().request(**kwargs)
@@ -149,13 +135,11 @@ async def asyncio_detailed(
 async def asyncio(
     job_id: str,
     *,
-    client: AuthenticatedClient | Client,
-    authorization: str,
+    client: AuthenticatedClient,
 ) -> GetV1JobsJobIdResultsResponse200 | GetV1JobsJobIdResultsResponse402 | None:
     """
     Args:
         job_id (str):
-        authorization (str):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -169,6 +153,5 @@ async def asyncio(
         await asyncio_detailed(
             job_id=job_id,
             client=client,
-            authorization=authorization,
         )
     ).parsed

@@ -9,19 +9,13 @@ from ...models.get_v1_workers_status_response_200 import GetV1WorkersStatusRespo
 from ...types import Response
 
 
-def _get_kwargs(
-    *,
-    authorization: str,
-) -> dict[str, Any]:
-    headers: dict[str, Any] = {}
-    headers["authorization"] = authorization
+def _get_kwargs() -> dict[str, Any]:
 
     _kwargs: dict[str, Any] = {
         "method": "get",
         "url": "/v1/workers/status",
     }
 
-    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -52,13 +46,9 @@ def _build_response(
 
 def sync_detailed(
     *,
-    client: AuthenticatedClient | Client,
-    authorization: str,
+    client: AuthenticatedClient,
 ) -> Response[GetV1WorkersStatusResponse200]:
     """
-    Args:
-        authorization (str):
-
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
@@ -67,9 +57,7 @@ def sync_detailed(
         Response[GetV1WorkersStatusResponse200]
     """
 
-    kwargs = _get_kwargs(
-        authorization=authorization,
-    )
+    kwargs = _get_kwargs()
 
     response = client.get_httpx_client().request(
         **kwargs,
@@ -80,13 +68,9 @@ def sync_detailed(
 
 def sync(
     *,
-    client: AuthenticatedClient | Client,
-    authorization: str,
+    client: AuthenticatedClient,
 ) -> GetV1WorkersStatusResponse200 | None:
     """
-    Args:
-        authorization (str):
-
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
@@ -97,19 +81,14 @@ def sync(
 
     return sync_detailed(
         client=client,
-        authorization=authorization,
     ).parsed
 
 
 async def asyncio_detailed(
     *,
-    client: AuthenticatedClient | Client,
-    authorization: str,
+    client: AuthenticatedClient,
 ) -> Response[GetV1WorkersStatusResponse200]:
     """
-    Args:
-        authorization (str):
-
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
@@ -118,9 +97,7 @@ async def asyncio_detailed(
         Response[GetV1WorkersStatusResponse200]
     """
 
-    kwargs = _get_kwargs(
-        authorization=authorization,
-    )
+    kwargs = _get_kwargs()
 
     response = await client.get_async_httpx_client().request(**kwargs)
 
@@ -129,13 +106,9 @@ async def asyncio_detailed(
 
 async def asyncio(
     *,
-    client: AuthenticatedClient | Client,
-    authorization: str,
+    client: AuthenticatedClient,
 ) -> GetV1WorkersStatusResponse200 | None:
     """
-    Args:
-        authorization (str):
-
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
         httpx.TimeoutException: If the request takes longer than Client.timeout.
@@ -147,6 +120,5 @@ async def asyncio(
     return (
         await asyncio_detailed(
             client=client,
-            authorization=authorization,
         )
     ).parsed

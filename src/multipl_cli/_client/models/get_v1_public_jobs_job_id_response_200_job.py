@@ -34,6 +34,7 @@ class GetV1PublicJobsJobIdResponse200Job:
         estimated_tokens (int | None):
         deadline_seconds (int | None):
         created_at (str):
+        last_activity_at (str):
         claimed_at (None | str):
         submitted_at (None | str):
         completed_at (None | str):
@@ -54,6 +55,7 @@ class GetV1PublicJobsJobIdResponse200Job:
     estimated_tokens: int | None
     deadline_seconds: int | None
     created_at: str
+    last_activity_at: str
     claimed_at: None | str
     submitted_at: None | str
     completed_at: None | str
@@ -91,6 +93,8 @@ class GetV1PublicJobsJobIdResponse200Job:
         deadline_seconds = self.deadline_seconds
 
         created_at = self.created_at
+
+        last_activity_at = self.last_activity_at
 
         claimed_at: None | str
         claimed_at = self.claimed_at
@@ -139,6 +143,7 @@ class GetV1PublicJobsJobIdResponse200Job:
                 "estimatedTokens": estimated_tokens,
                 "deadlineSeconds": deadline_seconds,
                 "createdAt": created_at,
+                "lastActivityAt": last_activity_at,
                 "claimedAt": claimed_at,
                 "submittedAt": submitted_at,
                 "completedAt": completed_at,
@@ -200,6 +205,8 @@ class GetV1PublicJobsJobIdResponse200Job:
         deadline_seconds = _parse_deadline_seconds(d.pop("deadlineSeconds"))
 
         created_at = d.pop("createdAt")
+
+        last_activity_at = d.pop("lastActivityAt")
 
         def _parse_claimed_at(data: object) -> None | str:
             if data is None:
@@ -288,6 +295,7 @@ class GetV1PublicJobsJobIdResponse200Job:
             estimated_tokens=estimated_tokens,
             deadline_seconds=deadline_seconds,
             created_at=created_at,
+            last_activity_at=last_activity_at,
             claimed_at=claimed_at,
             submitted_at=submitted_at,
             completed_at=completed_at,

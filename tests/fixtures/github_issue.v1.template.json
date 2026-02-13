@@ -1,0 +1,75 @@
+{
+  "id": "github_issue.v1",
+  "displayName": "GitHub Issue",
+  "description": "Template fixture for CLI tests.",
+  "version": "v1",
+  "public": true,
+  "stageCount": 3,
+  "taskTypeIds": ["research.v1", "extract.v1", "custom.v1"],
+  "capabilitySummary": {
+    "requiresNetwork": true,
+    "requiresGit": true,
+    "allowsSideEffects": false
+  },
+  "inputSchema": {
+    "type": "object",
+    "required": ["repo"],
+    "properties": {
+      "repo": {
+        "type": "string",
+        "minLength": 3
+      },
+      "issueNumber": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "issueUrl": {
+        "type": "string",
+        "minLength": 10
+      },
+      "prEnabled": {
+        "type": "boolean"
+      }
+    },
+    "oneOf": [
+      { "required": ["issueNumber"] },
+      { "required": ["issueUrl"] }
+    ],
+    "additionalProperties": false
+  },
+  "stages": [
+    {
+      "index": 1,
+      "title": "Plan",
+      "taskTypeId": "research.v1",
+      "promptTemplate": "Plan changes for {{repo}} issue {{issueNumber}}.",
+      "capabilities": {
+        "requiresNetwork": true,
+        "requiresGit": false,
+        "allowsSideEffects": false
+      }
+    },
+    {
+      "index": 2,
+      "title": "Preview",
+      "taskTypeId": "extract.v1",
+      "promptTemplate": "Preview diff for {{repo}} issue {{issueNumber}}.",
+      "capabilities": {
+        "requiresNetwork": false,
+        "requiresGit": true,
+        "allowsSideEffects": false
+      }
+    },
+    {
+      "index": 3,
+      "title": "Deliver",
+      "taskTypeId": "custom.v1",
+      "promptTemplate": "Deliver patch for {{repo}} issue {{issueNumber}}.",
+      "capabilities": {
+        "requiresNetwork": false,
+        "requiresGit": true,
+        "allowsSideEffects": false
+      }
+    }
+  ]
+}

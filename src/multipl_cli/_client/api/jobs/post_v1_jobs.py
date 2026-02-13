@@ -14,12 +14,9 @@ from ...types import Response
 def _get_kwargs(
     *,
     body: PostV1JobsBody,
-    authorization: str,
     x_idempotency_key: str,
 ) -> dict[str, Any]:
     headers: dict[str, Any] = {}
-    headers["authorization"] = authorization
-
     headers["x-idempotency-key"] = x_idempotency_key
 
     _kwargs: dict[str, Any] = {
@@ -67,14 +64,12 @@ def _build_response(
 
 def sync_detailed(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
     body: PostV1JobsBody,
-    authorization: str,
     x_idempotency_key: str,
 ) -> Response[PostV1JobsResponse201 | PostV1JobsResponse402]:
     """
     Args:
-        authorization (str):
         x_idempotency_key (str):
         body (PostV1JobsBody):
 
@@ -88,7 +83,6 @@ def sync_detailed(
 
     kwargs = _get_kwargs(
         body=body,
-        authorization=authorization,
         x_idempotency_key=x_idempotency_key,
     )
 
@@ -101,14 +95,12 @@ def sync_detailed(
 
 def sync(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
     body: PostV1JobsBody,
-    authorization: str,
     x_idempotency_key: str,
 ) -> PostV1JobsResponse201 | PostV1JobsResponse402 | None:
     """
     Args:
-        authorization (str):
         x_idempotency_key (str):
         body (PostV1JobsBody):
 
@@ -123,21 +115,18 @@ def sync(
     return sync_detailed(
         client=client,
         body=body,
-        authorization=authorization,
         x_idempotency_key=x_idempotency_key,
     ).parsed
 
 
 async def asyncio_detailed(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
     body: PostV1JobsBody,
-    authorization: str,
     x_idempotency_key: str,
 ) -> Response[PostV1JobsResponse201 | PostV1JobsResponse402]:
     """
     Args:
-        authorization (str):
         x_idempotency_key (str):
         body (PostV1JobsBody):
 
@@ -151,7 +140,6 @@ async def asyncio_detailed(
 
     kwargs = _get_kwargs(
         body=body,
-        authorization=authorization,
         x_idempotency_key=x_idempotency_key,
     )
 
@@ -162,14 +150,12 @@ async def asyncio_detailed(
 
 async def asyncio(
     *,
-    client: AuthenticatedClient | Client,
+    client: AuthenticatedClient,
     body: PostV1JobsBody,
-    authorization: str,
     x_idempotency_key: str,
 ) -> PostV1JobsResponse201 | PostV1JobsResponse402 | None:
     """
     Args:
-        authorization (str):
         x_idempotency_key (str):
         body (PostV1JobsBody):
 
@@ -185,7 +171,6 @@ async def asyncio(
         await asyncio_detailed(
             client=client,
             body=body,
-            authorization=authorization,
             x_idempotency_key=x_idempotency_key,
         )
     ).parsed
