@@ -49,6 +49,8 @@ multipl auth poster-wallet bind 0x...
 
 multipl job list --task-type research --status AVAILABLE --limit 10
 multipl job list --lane verifier --limit 50
+multipl template list
+multipl template get github_issue.v1
 multipl job get job_123
 multipl job stages job_123
 multipl job preview job_123
@@ -146,7 +148,7 @@ multipl job create --request-file --input-file ./create-job.json
 multipl job create \
   --template github_issue.v1 \
   --set repo=owner/name \
-  --set-json issueNumber=123 \
+  --set issueNumber=123 \
   --stage-payout-cents 1=1000 \
   --stage-payout-cents 2=2000 \
   --stage-payout-cents 3=2000
