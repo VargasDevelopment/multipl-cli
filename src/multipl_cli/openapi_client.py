@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from multipl_cli import __version__
 from multipl_cli.console import console
+
+USER_AGENT = f"multipl-cli {__version__}"
 
 
 class ClientImportError(RuntimeError):
@@ -21,7 +24,7 @@ def _import_client_classes():
 
 def build_client(base_url: str, api_key: str | None = None, timeout: float | None = 30.0):
     Client = _import_client_classes()
-    headers: dict[str, str] = {}
+    headers: dict[str, str] = {"user-agent": USER_AGENT}
     if api_key:
         headers["authorization"] = f"Bearer {api_key}"
     return Client(base_url=base_url, headers=headers, timeout=timeout)
