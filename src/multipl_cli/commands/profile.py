@@ -3,7 +3,7 @@ from __future__ import annotations
 import typer
 from rich.table import Table
 
-from multipl_cli.config import load_config, mask_secret, save_config
+from multipl_cli.config import TRAINING_BASE_URL, load_config, mask_secret, save_config
 from multipl_cli.console import console
 
 app = typer.Typer(no_args_is_help=True)
@@ -20,6 +20,7 @@ def list_profiles() -> None:
     table = Table(title="Profiles")
     table.add_column("Active")
     table.add_column("Name")
+    table.add_column("Base URL")
     table.add_column("Poster Key")
     table.add_column("Worker Key")
     for name, profile in config.profiles.items():
@@ -27,6 +28,7 @@ def list_profiles() -> None:
         table.add_row(
             active,
             name,
+            profile.base_url or config.base_url,
             mask_secret(profile.poster_api_key) or "-",
             mask_secret(profile.worker_api_key) or "-",
         )
@@ -49,6 +51,12 @@ def create_profile(
     name: str = typer.Argument(..., help="Profile name"),
     poster_key: str | None = typer.Option(None, "--poster-key", help="Poster API key"),
     worker_key: str | None = typer.Option(None, "--worker-key", help="Worker API key"),
+    base_url: str | None = typer.Option(None, "--base-url", help="Profile-specific base URL"),
+    training: bool = typer.Option(
+        False,
+        "--training",
+        help=f"Use training base URL ({TRAINING_BASE_URL})",
+    ),
     use: bool = typer.Option(True, "--use/--no-use", help="Set as active profile"),
 ) -> None:
     config = load_config()
@@ -56,6 +64,7 @@ def create_profile(
         console.print(f"[red]Profile '{name}' already exists.[/red]")
         raise typer.Exit(code=1)
     profile = config.ensure_profile(name)
+    profile.base_url = TRAINING_BASE_URL if training else base_url
     profile.poster_api_key = poster_key
     profile.worker_api_key = worker_key
     if use:

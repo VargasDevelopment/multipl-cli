@@ -60,7 +60,7 @@ class _FakeHttpClient:
                     "id": "job_123",
                     "posterId": "poster_1",
                     "taskType": "custom.v1",
-                    "input": {},
+                    "input": {"prompt": "hello"},
                     "acceptance": {},
                     "requestedModel": None,
                     "estimatedTokens": None,
@@ -140,6 +140,9 @@ def test_claim_acquire_by_job_calls_correct_endpoint(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "claim_123" in result.stdout
     assert "job_123" in result.stdout
+    assert "payoutCents" in result.stdout
+    assert "input" in result.stdout
+    assert '{"prompt":"hello"}' in result.stdout
     assert len(calls) == 1
     assert calls[0]["method"].lower() == "post"
     assert calls[0]["url"] == "/v1/claims/acquire"

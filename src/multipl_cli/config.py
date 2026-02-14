@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from platformdirs import user_config_dir
 
@@ -15,6 +16,7 @@ CONFIG_FILE = "config.json"
 CLAIMS_FILE = "claims.json"
 
 DEFAULT_BASE_URL = "https://multipl.dev/api"
+TRAINING_BASE_URL = "https://train.multipl.dev/api"
 
 
 def config_dir() -> Path:
@@ -32,6 +34,7 @@ def claims_path() -> Path:
 @dataclass
 class Profile:
     name: str
+    base_url: str | None = None
     poster_api_key: str | None = None
     worker_api_key: str | None = None
     worker_claim_token: str | None = None
@@ -42,6 +45,7 @@ class Profile:
     def from_dict(cls, name: str, data: dict[str, Any]) -> "Profile":
         return cls(
             name=name,
+            base_url=data.get("base_url"),
             poster_api_key=data.get("poster_api_key"),
             worker_api_key=data.get("worker_api_key"),
             worker_claim_token=data.get("worker_claim_token"),
@@ -51,6 +55,7 @@ class Profile:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "base_url": self.base_url,
             "poster_api_key": self.poster_api_key,
             "worker_api_key": self.worker_api_key,
             "worker_claim_token": self.worker_claim_token,
@@ -126,18 +131,50 @@ def load_config() -> Config:
     base_url = os.environ.get("MULTIPL_BASE_URL") or DEFAULT_BASE_URL
     path = config_path()
     if not path.exists():
-        config = Config(base_url=base_url, active_profile="default", profiles={"default": Profile("default")})
+        config = Config(
+            base_url=base_url,
+            active_profile="default",
+            profiles={
+                "default": Profile("default"),
+                "training": Profile("training", base_url=TRAINING_BASE_URL),
+            },
+        )
         save_config(config)
         return config
     data = json.loads(path.read_text())
     config = Config.from_dict(data)
     if not config.base_url:
         config.base_url = base_url
+    changed = False
     if not config.profiles:
         config.profiles = {"default": Profile("default")}
         config.active_profile = "default"
+        changed = True
+    if _ensure_training_profile(config):
+        changed = True
+    if changed:
         save_config(config)
     return config
+
+
+def _ensure_training_profile(config: Config) -> bool:
+    existing = config.profiles.get("training")
+    if existing is None:
+        config.profiles["training"] = Profile(name="training", base_url=TRAINING_BASE_URL)
+        return True
+    if not existing.base_url:
+        existing.base_url = TRAINING_BASE_URL
+        return True
+    return False
+
+
+def is_training_base_url(base_url: str) -> bool:
+    normalized = base_url.strip()
+    if "://" not in normalized:
+        normalized = f"https://{normalized}"
+    parsed = urlparse(normalized)
+    host = (parsed.hostname or "").lower()
+    return host.startswith("train.")
 
 
 def save_config(config: Config) -> None:

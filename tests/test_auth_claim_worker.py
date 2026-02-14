@@ -72,7 +72,7 @@ def test_claim_worker_missing_poster_key_exits_2() -> None:
 
 def test_claim_worker_rate_limited_exits_4(monkeypatch) -> None:
     monkeypatch.setattr(auth, "ensure_client_available", lambda: None)
-    monkeypatch.setattr(auth, "build_client", lambda _base_url: object())
+    monkeypatch.setattr(auth, "build_client", lambda _base_url, **_kwargs: object())
 
     def fake_claim_worker_api(**_kwargs):
         return _FakeResponse(
@@ -98,16 +98,15 @@ def test_claim_worker_missing_token_exits_1() -> None:
 
 def test_claim_worker_success_json(monkeypatch) -> None:
     monkeypatch.setattr(auth, "ensure_client_available", lambda: None)
-    monkeypatch.setattr(auth, "build_client", lambda _base_url: object())
+    monkeypatch.setattr(auth, "build_client", lambda _base_url, **_kwargs: object())
     monkeypatch.setattr(auth, "save_config", lambda _config: None)
 
     calls: list[dict] = []
 
-    def fake_claim_worker_api(*, client, authorization, body):
+    def fake_claim_worker_api(*, client, body):
         calls.append(
             {
                 "client": client,
-                "authorization": authorization,
                 "claim_token": body.claim_token,
                 "verification_code": body.verification_code,
             }
@@ -140,23 +139,21 @@ def test_claim_worker_success_json(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "worker_123" in result.stdout
     assert len(calls) == 1
-    assert calls[0]["authorization"] == "Bearer poster_test_key"
     assert calls[0]["claim_token"] == "token-123"
     assert calls[0]["verification_code"] == "abc123"
 
 
 def test_claim_worker_uses_saved_claim_and_clears_after_success(monkeypatch) -> None:
     monkeypatch.setattr(auth, "ensure_client_available", lambda: None)
-    monkeypatch.setattr(auth, "build_client", lambda _base_url: object())
+    monkeypatch.setattr(auth, "build_client", lambda _base_url, **_kwargs: object())
 
     calls: list[dict] = []
     saved: list[Config] = []
 
-    def fake_claim_worker_api(*, client, authorization, body):
+    def fake_claim_worker_api(*, client, body):
         calls.append(
             {
                 "client": client,
-                "authorization": authorization,
                 "claim_token": body.claim_token,
                 "verification_code": body.verification_code,
             }

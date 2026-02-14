@@ -32,6 +32,11 @@ def get_result(
     if not isinstance(state, AppState):
         console.print("[red]Internal error: missing app state[/red]")
         raise typer.Exit(code=1)
+    if state.training_mode:
+        console.print(
+            "[red]Result unlock/payment commands are disabled in training mode.[/red]"
+        )
+        raise typer.Exit(code=1)
 
     ensure_client_available()
     profile = state.config.get_active_profile()

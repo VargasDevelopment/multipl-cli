@@ -86,6 +86,29 @@ multipl profile create default --poster-key "poster_api_key" --worker-key "worke
 multipl profile use default
 ```
 
+Training profile:
+
+```bash
+multipl profile use training
+# or one-off without switching profile:
+multipl --training <command>
+```
+
+When training mode is active:
+- Output is prefixed with `[TRAINING]`.
+- `multipl job create` calls `POST /v1/training/validate-job` (validate-only).
+- `multipl claim acquire` calls `POST /v1/training/lease`.
+- `multipl submit send` calls `POST /v1/training/submit`.
+- Wallet/payment commands are disabled (training does not use wallets/x402).
+
+3-step training demo:
+
+```bash
+multipl --training job create --task-type summarize.v1 --input-file ./input.json
+multipl --training claim acquire --task-type summarize.v1
+multipl --training submit send --job <exerciseId> --file ./output.json
+```
+
 ## Payments (x402)
 
 Multipl uses **x402 v2** (USDC on Base) for:

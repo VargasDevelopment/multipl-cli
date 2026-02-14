@@ -29,7 +29,6 @@ def whoami(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
-    client = build_client(state.base_url)
 
     if not profile.worker_api_key and not profile.poster_api_key:
         console.print("[yellow]No API keys configured for active profile.[/yellow]")
@@ -38,7 +37,8 @@ def whoami(
     payload: dict = {}
 
     if profile.worker_api_key:
-        response = get_worker_me(client=client, authorization=f"Bearer {profile.worker_api_key}")
+        worker_client = build_client(state.base_url, api_key=profile.worker_api_key)
+        response = get_worker_me(client=worker_client)
         if response.status_code == 200 and response.parsed is not None:
             worker = response.parsed.worker
             payload["worker"] = worker.to_dict()
@@ -52,9 +52,7 @@ def whoami(
                 table.add_row("claimedByPosterId", str(worker.claimed_by_poster_id))
                 console.print(table)
 
-            metrics = get_worker_metrics(
-                client=client, authorization=f"Bearer {profile.worker_api_key}"
-            )
+            metrics = get_worker_metrics(client=worker_client)
             if metrics.status_code == 200 and metrics.parsed is not None:
                 payload["worker_metrics"] = metrics.parsed.to_dict()
                 if not json_output:
@@ -65,9 +63,8 @@ def whoami(
             )
 
     if profile.poster_api_key:
-        metrics = get_poster_metrics(
-            client=client, authorization=f"Bearer {profile.poster_api_key}"
-        )
+        poster_client = build_client(state.base_url, api_key=profile.poster_api_key)
+        metrics = get_poster_metrics(client=poster_client)
         if metrics.status_code == 200 and metrics.parsed is not None:
             payload["poster_metrics"] = metrics.parsed.to_dict()
             if not json_output:

@@ -22,7 +22,7 @@ from multipl_cli._client.models.post_v1_posters_wallet_nonce_body import (
     PostV1PostersWalletNonceBody,
 )
 from multipl_cli.app_state import AppState
-from multipl_cli.config import load_config
+from multipl_cli.config import is_training_base_url, load_config
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
 from multipl_cli.polling import extract_retry_after_seconds
@@ -34,7 +34,14 @@ def _state_from_ctx(ctx: typer.Context | None) -> AppState:
     if ctx is not None and isinstance(ctx.obj, AppState):
         return ctx.obj
     config = load_config()
-    return AppState(config=config, profile_name=config.active_profile, base_url=config.base_url)
+    active_profile = config.get_active_profile()
+    base_url = active_profile.base_url or config.base_url
+    return AppState(
+        config=config,
+        profile_name=config.active_profile,
+        base_url=base_url,
+        training_mode=is_training_base_url(base_url),
+    )
 
 
 def _parse_response_json(response) -> Any | None:
@@ -107,13 +114,11 @@ def _sign_wallet_binding_message(message: str, private_key: str) -> str:
 def _request_nonce(
     *,
     client,
-    poster_api_key: str,
     address: str,
 ) -> dict[str, Any]:
     try:
         response = get_poster_wallet_nonce(
             client=client,
-            authorization=f"Bearer {poster_api_key}",
             body=PostV1PostersWalletNonceBody(address=address),
         )
     except httpx.HTTPError as exc:
@@ -143,7 +148,6 @@ def _request_nonce(
 def _request_bind(
     *,
     client,
-    poster_api_key: str,
     address: str,
     nonce: str,
     signature: str,
@@ -151,7 +155,6 @@ def _request_bind(
     try:
         response = bind_poster_wallet(
             client=client,
-            authorization=f"Bearer {poster_api_key}",
             body=PostV1PostersWalletBindBody(address=address, nonce=nonce, signature=signature),
         )
     except httpx.HTTPError as exc:
@@ -187,14 +190,21 @@ def nonce(
 ) -> None:
     wallet_address = _require_valid_address(address)
     state = _state_from_ctx(ctx)
+    if state.training_mode:
+        console.print(
+            "[red]Poster wallet commands are disabled in training mode. "
+            "Training does not use payouts or wallet binding.[/red]"
+        )
+        raise typer.Exit(code=1)
+
     profile = _resolve_profile(state, profile_name)
     if not profile.poster_api_key:
         console.print("[red]Poster API key not configured for this profile.[/red]")
         raise typer.Exit(code=2)
 
     ensure_client_available()
-    client = build_client(state.base_url)
-    payload = _request_nonce(client=client, poster_api_key=profile.poster_api_key, address=wallet_address)
+    client = build_client(state.base_url, api_key=profile.poster_api_key)
+    payload = _request_nonce(client=client, address=wallet_address)
 
     if json_output:
         console.print(payload)
@@ -221,16 +231,22 @@ def bind(
 ) -> None:
     wallet_address = _require_valid_address(address)
     state = _state_from_ctx(ctx)
+    if state.training_mode:
+        console.print(
+            "[red]Poster wallet commands are disabled in training mode. "
+            "Training does not use payouts or wallet binding.[/red]"
+        )
+        raise typer.Exit(code=1)
+
     profile = _resolve_profile(state, profile_name)
     if not profile.poster_api_key:
         console.print("[red]Poster API key not configured for this profile.[/red]")
         raise typer.Exit(code=2)
 
     ensure_client_available()
-    client = build_client(state.base_url)
+    client = build_client(state.base_url, api_key=profile.poster_api_key)
     nonce_payload = _request_nonce(
         client=client,
-        poster_api_key=profile.poster_api_key,
         address=wallet_address,
     )
 
@@ -267,7 +283,6 @@ def bind(
 
     bind_payload = _request_bind(
         client=client,
-        poster_api_key=profile.poster_api_key,
         address=nonce_address,
         nonce=nonce_value,
         signature=signature,
