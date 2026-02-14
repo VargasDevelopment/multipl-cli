@@ -258,6 +258,29 @@ from .get_v1_templates_response_200_item import GetV1TemplatesResponse200Item
 from .get_v1_templates_response_200_item_capability_summary import (
     GetV1TemplatesResponse200ItemCapabilitySummary,
 )
+from .get_v1_training_templates_id_response_200 import GetV1TrainingTemplatesIdResponse200
+from .get_v1_training_templates_id_response_200_capability_summary import (
+    GetV1TrainingTemplatesIdResponse200CapabilitySummary,
+)
+from .get_v1_training_templates_id_response_200_defaults import (
+    GetV1TrainingTemplatesIdResponse200Defaults,
+)
+from .get_v1_training_templates_id_response_200_examples_item import (
+    GetV1TrainingTemplatesIdResponse200ExamplesItem,
+)
+from .get_v1_training_templates_id_response_200_input_schema import (
+    GetV1TrainingTemplatesIdResponse200InputSchema,
+)
+from .get_v1_training_templates_id_response_200_stages_item import (
+    GetV1TrainingTemplatesIdResponse200StagesItem,
+)
+from .get_v1_training_templates_id_response_200_stages_item_capabilities import (
+    GetV1TrainingTemplatesIdResponse200StagesItemCapabilities,
+)
+from .get_v1_training_templates_response_200_item import GetV1TrainingTemplatesResponse200Item
+from .get_v1_training_templates_response_200_item_capability_summary import (
+    GetV1TrainingTemplatesResponse200ItemCapabilitySummary,
+)
 from .get_v1_workers_me_response_200 import GetV1WorkersMeResponse200
 from .get_v1_workers_me_response_200_api_key import GetV1WorkersMeResponse200ApiKey
 from .get_v1_workers_me_response_200_worker import GetV1WorkersMeResponse200Worker
@@ -428,6 +451,70 @@ from .post_v1_posters_wallet_bind_body import PostV1PostersWalletBindBody
 from .post_v1_posters_wallet_bind_response_200 import PostV1PostersWalletBindResponse200
 from .post_v1_posters_wallet_nonce_body import PostV1PostersWalletNonceBody
 from .post_v1_posters_wallet_nonce_response_200 import PostV1PostersWalletNonceResponse200
+from .post_v1_training_lease_body import PostV1TrainingLeaseBody
+from .post_v1_training_lease_response_200 import PostV1TrainingLeaseResponse200
+from .post_v1_training_lease_response_200_exercise import PostV1TrainingLeaseResponse200Exercise
+from .post_v1_training_lease_response_200_exercise_acceptance_contract import (
+    PostV1TrainingLeaseResponse200ExerciseAcceptanceContract,
+)
+from .post_v1_training_lease_response_200_exercise_acceptance_contract_must_include import (
+    PostV1TrainingLeaseResponse200ExerciseAcceptanceContractMustInclude,
+)
+from .post_v1_training_lease_response_200_exercise_acceptance_contract_output_schema import (
+    PostV1TrainingLeaseResponse200ExerciseAcceptanceContractOutputSchema,
+)
+from .post_v1_training_lease_response_200_exercise_input import (
+    PostV1TrainingLeaseResponse200ExerciseInput,
+)
+from .post_v1_training_lease_response_200_lease import PostV1TrainingLeaseResponse200Lease
+from .post_v1_training_lease_response_200_mode import PostV1TrainingLeaseResponse200Mode
+from .post_v1_training_submit_body import PostV1TrainingSubmitBody
+from .post_v1_training_submit_response_200 import PostV1TrainingSubmitResponse200
+from .post_v1_training_submit_response_200_acceptance_report import (
+    PostV1TrainingSubmitResponse200AcceptanceReport,
+)
+from .post_v1_training_submit_response_200_acceptance_report_checks_item import (
+    PostV1TrainingSubmitResponse200AcceptanceReportChecksItem,
+)
+from .post_v1_training_submit_response_200_acceptance_report_commitment import (
+    PostV1TrainingSubmitResponse200AcceptanceReportCommitment,
+)
+from .post_v1_training_submit_response_200_acceptance_report_stats import (
+    PostV1TrainingSubmitResponse200AcceptanceReportStats,
+)
+from .post_v1_training_submit_response_200_acceptance_report_status import (
+    PostV1TrainingSubmitResponse200AcceptanceReportStatus,
+)
+from .post_v1_training_submit_response_200_diagnostics_item import (
+    PostV1TrainingSubmitResponse200DiagnosticsItem,
+)
+from .post_v1_training_submit_response_200_mode import PostV1TrainingSubmitResponse200Mode
+from .post_v1_training_validate_job_body import PostV1TrainingValidateJobBody
+from .post_v1_training_validate_job_body_acceptance import PostV1TrainingValidateJobBodyAcceptance
+from .post_v1_training_validate_job_body_input import PostV1TrainingValidateJobBodyInput
+from .post_v1_training_validate_job_body_stages_item import PostV1TrainingValidateJobBodyStagesItem
+from .post_v1_training_validate_job_body_stages_item_acceptance import (
+    PostV1TrainingValidateJobBodyStagesItemAcceptance,
+)
+from .post_v1_training_validate_job_body_stages_item_assignment_mode import (
+    PostV1TrainingValidateJobBodyStagesItemAssignmentMode,
+)
+from .post_v1_training_validate_job_body_stages_item_input import (
+    PostV1TrainingValidateJobBodyStagesItemInput,
+)
+from .post_v1_training_validate_job_body_stages_item_policy import (
+    PostV1TrainingValidateJobBodyStagesItemPolicy,
+)
+from .post_v1_training_validate_job_body_stages_item_visibility import (
+    PostV1TrainingValidateJobBodyStagesItemVisibility,
+)
+from .post_v1_training_validate_job_response_200 import PostV1TrainingValidateJobResponse200
+from .post_v1_training_validate_job_response_200_diagnostics_item import (
+    PostV1TrainingValidateJobResponse200DiagnosticsItem,
+)
+from .post_v1_training_validate_job_response_200_mode import (
+    PostV1TrainingValidateJobResponse200Mode,
+)
 from .post_v1_workers_claim_body import PostV1WorkersClaimBody
 from .post_v1_workers_claim_response_200 import PostV1WorkersClaimResponse200
 from .post_v1_workers_claim_response_200_worker import PostV1WorkersClaimResponse200Worker
@@ -551,6 +638,15 @@ __all__ = (
     "GetV1TemplatesIdResponse200StagesItemCapabilities",
     "GetV1TemplatesResponse200Item",
     "GetV1TemplatesResponse200ItemCapabilitySummary",
+    "GetV1TrainingTemplatesIdResponse200",
+    "GetV1TrainingTemplatesIdResponse200CapabilitySummary",
+    "GetV1TrainingTemplatesIdResponse200Defaults",
+    "GetV1TrainingTemplatesIdResponse200ExamplesItem",
+    "GetV1TrainingTemplatesIdResponse200InputSchema",
+    "GetV1TrainingTemplatesIdResponse200StagesItem",
+    "GetV1TrainingTemplatesIdResponse200StagesItemCapabilities",
+    "GetV1TrainingTemplatesResponse200Item",
+    "GetV1TrainingTemplatesResponse200ItemCapabilitySummary",
     "GetV1WorkersMeResponse200",
     "GetV1WorkersMeResponse200ApiKey",
     "GetV1WorkersMeResponse200Worker",
@@ -641,6 +737,36 @@ __all__ = (
     "PostV1PostersWalletBindResponse200",
     "PostV1PostersWalletNonceBody",
     "PostV1PostersWalletNonceResponse200",
+    "PostV1TrainingLeaseBody",
+    "PostV1TrainingLeaseResponse200",
+    "PostV1TrainingLeaseResponse200Exercise",
+    "PostV1TrainingLeaseResponse200ExerciseAcceptanceContract",
+    "PostV1TrainingLeaseResponse200ExerciseAcceptanceContractMustInclude",
+    "PostV1TrainingLeaseResponse200ExerciseAcceptanceContractOutputSchema",
+    "PostV1TrainingLeaseResponse200ExerciseInput",
+    "PostV1TrainingLeaseResponse200Lease",
+    "PostV1TrainingLeaseResponse200Mode",
+    "PostV1TrainingSubmitBody",
+    "PostV1TrainingSubmitResponse200",
+    "PostV1TrainingSubmitResponse200AcceptanceReport",
+    "PostV1TrainingSubmitResponse200AcceptanceReportChecksItem",
+    "PostV1TrainingSubmitResponse200AcceptanceReportCommitment",
+    "PostV1TrainingSubmitResponse200AcceptanceReportStats",
+    "PostV1TrainingSubmitResponse200AcceptanceReportStatus",
+    "PostV1TrainingSubmitResponse200DiagnosticsItem",
+    "PostV1TrainingSubmitResponse200Mode",
+    "PostV1TrainingValidateJobBody",
+    "PostV1TrainingValidateJobBodyAcceptance",
+    "PostV1TrainingValidateJobBodyInput",
+    "PostV1TrainingValidateJobBodyStagesItem",
+    "PostV1TrainingValidateJobBodyStagesItemAcceptance",
+    "PostV1TrainingValidateJobBodyStagesItemAssignmentMode",
+    "PostV1TrainingValidateJobBodyStagesItemInput",
+    "PostV1TrainingValidateJobBodyStagesItemPolicy",
+    "PostV1TrainingValidateJobBodyStagesItemVisibility",
+    "PostV1TrainingValidateJobResponse200",
+    "PostV1TrainingValidateJobResponse200DiagnosticsItem",
+    "PostV1TrainingValidateJobResponse200Mode",
     "PostV1WorkersClaimBody",
     "PostV1WorkersClaimResponse200",
     "PostV1WorkersClaimResponse200Worker",

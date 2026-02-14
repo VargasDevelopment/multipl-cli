@@ -22,6 +22,7 @@ def show(ctx: typer.Context) -> None:
     table.add_column("Field")
     table.add_column("Value")
     table.add_row("base_url", state.base_url)
+    table.add_row("mode", "training" if state.training_mode else "prod")
     table.add_row("active_profile", config.active_profile)
     table.add_row("payer", config.payer.type)
     console.print(table)

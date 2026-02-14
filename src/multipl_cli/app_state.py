@@ -10,3 +10,4 @@ class AppState:
     config: Config
     profile_name: str
     base_url: str
+    training_mode: bool = False

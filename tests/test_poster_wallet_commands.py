@@ -49,7 +49,7 @@ def test_bind_requires_poster_key() -> None:
 
 def test_nonce_rate_limit_exits_4(monkeypatch) -> None:
     monkeypatch.setattr(poster_wallet, "ensure_client_available", lambda: None)
-    monkeypatch.setattr(poster_wallet, "build_client", lambda _base_url: object())
+    monkeypatch.setattr(poster_wallet, "build_client", lambda _base_url, **_kwargs: object())
 
     def fake_nonce(**_kwargs):
         return _FakeResponse(status_code=429, content=b'{"error":"rate_limited"}', headers={"retry-after": "7"})
@@ -68,7 +68,7 @@ def test_nonce_rate_limit_exits_4(monkeypatch) -> None:
 
 def test_bind_no_sign_exits_1_and_skips_bind(monkeypatch) -> None:
     monkeypatch.setattr(poster_wallet, "ensure_client_available", lambda: None)
-    monkeypatch.setattr(poster_wallet, "build_client", lambda _base_url: object())
+    monkeypatch.setattr(poster_wallet, "build_client", lambda _base_url, **_kwargs: object())
 
     def fake_nonce(**_kwargs):
         parsed = PostV1PostersWalletNonceResponse200(
@@ -102,7 +102,7 @@ def test_bind_no_sign_exits_1_and_skips_bind(monkeypatch) -> None:
 def test_bind_missing_wallet_env_exits_1(monkeypatch) -> None:
     monkeypatch.delenv("MULTIPL_WALLET_PRIVATE_KEY", raising=False)
     monkeypatch.setattr(poster_wallet, "ensure_client_available", lambda: None)
-    monkeypatch.setattr(poster_wallet, "build_client", lambda _base_url: object())
+    monkeypatch.setattr(poster_wallet, "build_client", lambda _base_url, **_kwargs: object())
 
     def fake_nonce(**_kwargs):
         parsed = PostV1PostersWalletNonceResponse200(
@@ -131,7 +131,7 @@ def test_bind_missing_wallet_env_exits_1(monkeypatch) -> None:
 
 def test_bind_success(monkeypatch) -> None:
     monkeypatch.setattr(poster_wallet, "ensure_client_available", lambda: None)
-    monkeypatch.setattr(poster_wallet, "build_client", lambda _base_url: object())
+    monkeypatch.setattr(poster_wallet, "build_client", lambda _base_url, **_kwargs: object())
     monkeypatch.setenv(
         "MULTIPL_WALLET_PRIVATE_KEY",
         "0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce036f4f9d9f04b922f2f2f",
@@ -148,11 +148,10 @@ def test_bind_success(monkeypatch) -> None:
         )
         return _FakeResponse(status_code=200, content=b"{}", headers={}, parsed=parsed)
 
-    def fake_bind(*, client, authorization, body):
+    def fake_bind(*, client, body):
         calls.append(
             {
                 "client": client,
-                "authorization": authorization,
                 "address": body.address,
                 "nonce": body.nonce,
                 "signature": body.signature,
@@ -176,7 +175,6 @@ def test_bind_success(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "Poster wallet bound" in result.stdout
     assert len(calls) == 1
-    assert calls[0]["authorization"] == "Bearer poster_test_key"
     assert calls[0]["address"] == "0x1234567890123456789012345678901234567890"
     assert calls[0]["nonce"] == "nonce-123"
     assert calls[0]["signature"].startswith("0x")

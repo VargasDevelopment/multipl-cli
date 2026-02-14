@@ -8,9 +8,13 @@ from typing import Any
 import typer
 from rich.table import Table
 
+from multipl_cli._client.api.training.post_v1_training_submit import (
+    sync_detailed as training_submit,
+)
 from multipl_cli._client.models.post_v1_claims_claim_id_submit_body import (
     PostV1ClaimsClaimIdSubmitBody,
 )
+from multipl_cli._client.models.post_v1_training_submit_body import PostV1TrainingSubmitBody
 from multipl_cli.acceptance import validate_acceptance
 from multipl_cli.app_state import AppState
 from multipl_cli.config import ClaimsCache
@@ -99,6 +103,12 @@ def _print_failed_acceptance(acceptance_report: dict[str, Any] | None) -> None:
 def _response_json(response) -> dict[str, Any]:
     try:
         payload = response.json()
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        pass
+    try:
+        payload = json.loads(getattr(response, "content", b""))
         return payload if isinstance(payload, dict) else {}
     except Exception:
         return {}
@@ -122,6 +132,12 @@ def validate(
     state = ctx.obj
     if not isinstance(state, AppState):
         console.print("[red]Internal error: missing app state[/red]")
+        raise typer.Exit(code=1)
+    if state.training_mode:
+        console.print(
+            "[red]`multipl submit validate` is unavailable in training mode. "
+            "Use `multipl submit send` to grade the leased exercise.[/red]"
+        )
         raise typer.Exit(code=1)
 
     ensure_client_available()
@@ -158,12 +174,79 @@ def send(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
-    if not profile.worker_api_key:
+    if not state.training_mode and not profile.worker_api_key:
         console.print("[red]Worker API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
     client = build_client(state.base_url)
     payload = _load_json(file)
+
+    if state.training_mode:
+        cache = ClaimsCache.load()
+        resolved_claim_id = claim_id or cache.get_claim(state.profile_name, job_id)
+        if not resolved_claim_id:
+            console.print(
+                "[red]Training lease reference not found. Acquire first with `multipl claim acquire`.[/red]"
+            )
+            raise typer.Exit(code=1)
+
+        lease_id, sep, submit_token = resolved_claim_id.partition(":")
+        if not sep or not lease_id or not submit_token:
+            console.print(
+                "[red]Training lease reference is invalid. Re-acquire with `multipl claim acquire`.[/red]"
+            )
+            raise typer.Exit(code=1)
+
+        response = training_submit(
+            client=client,
+            body=PostV1TrainingSubmitBody(
+                lease_id=lease_id,
+                submit_token=submit_token,
+                output=payload,
+            ),
+        )
+        response_payload = _response_json(response)
+
+        if int(response.status_code) != 200:
+            if response.status_code in {403, 409, 422}:
+                console.print(
+                    f"[red]Training submission rejected (status={response.status_code}).[/red]"
+                )
+                if response_payload:
+                    console.print(response_payload)
+                raise typer.Exit(code=1)
+            console.print(f"[red]Training submit failed (status={response.status_code}).[/red]")
+            if response_payload:
+                console.print(response_payload)
+            raise typer.Exit(code=2)
+
+        if response.parsed is None:
+            console.print("[red]Invalid training submit response payload.[/red]")
+            raise typer.Exit(code=2)
+
+        response_payload = response.parsed.to_dict()
+        passed = response.parsed.pass_
+        diagnostics = (
+            response_payload.get("diagnostics", [])
+            if isinstance(response_payload, dict)
+            and isinstance(response_payload.get("diagnostics"), list)
+            else []
+        )
+        if json_output:
+            console.print(response_payload)
+        else:
+            console.print("[green]Training submission: PASS[/green]" if passed else "[red]Training submission: FAIL[/red]")
+            if diagnostics:
+                for diagnostic in diagnostics:
+                    if not isinstance(diagnostic, dict):
+                        continue
+                    code = diagnostic.get("code") or "diagnostic"
+                    message = diagnostic.get("message") or "validation issue"
+                    console.print(f"- {code}: {message}")
+
+        if not passed:
+            raise typer.Exit(code=1)
+        return
 
     if not force:
         acceptance_contract = _fetch_acceptance_contract(client, job_id)

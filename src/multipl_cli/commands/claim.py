@@ -12,12 +12,17 @@ from urllib.parse import urlparse
 import typer
 from rich.table import Table
 
+from multipl_cli._client.api.training.post_v1_training_lease import (
+    sync_detailed as training_lease,
+)
+from multipl_cli._client.models.post_v1_training_lease_body import PostV1TrainingLeaseBody
 from multipl_cli._client.models.post_v1_claims_acquire_response_200 import (
     PostV1ClaimsAcquireResponse200,
 )
 from multipl_cli._client.models.post_v1_claims_claim_id_release_response_200 import (
     PostV1ClaimsClaimIdReleaseResponse200,
 )
+from multipl_cli._client.types import UNSET
 from multipl_cli.app_state import AppState
 from multipl_cli.config import ClaimsCache
 from multipl_cli.console import console
@@ -44,14 +49,44 @@ def _parse_json_body(response) -> dict:
             return {}
 
 
+def _preview_json(value: object, *, max_len: int = 280) -> str:
+    try:
+        rendered = json.dumps(value, separators=(",", ":"), sort_keys=True)
+    except Exception:
+        rendered = str(value)
+    if len(rendered) <= max_len:
+        return rendered
+    return f"{rendered[:max_len]}... (truncated)"
+
+
 def _print_claim(claim: PostV1ClaimsAcquireResponse200) -> None:
     table = Table(title="Claim Acquired")
     table.add_column("Field")
     table.add_column("Value")
     table.add_row("claim.id", claim.claim.id)
+    table.add_row("claim.status", claim.claim.status.value)
     table.add_row("job.id", claim.job.id)
     table.add_row("taskType", claim.job.task_type)
+    table.add_row("job.state", claim.job.state.value)
+    table.add_row(
+        "payoutCents",
+        str(claim.job.payout_cents) if claim.job.payout_cents is not None else "-",
+    )
+    table.add_row(
+        "deadlineSeconds",
+        str(claim.job.deadline_seconds) if claim.job.deadline_seconds is not None else "-",
+    )
+    table.add_row(
+        "requestedModel",
+        claim.job.requested_model if claim.job.requested_model is not None else "-",
+    )
+    table.add_row(
+        "estimatedTokens",
+        str(claim.job.estimated_tokens) if claim.job.estimated_tokens is not None else "-",
+    )
     table.add_row("leaseExpiresAt", claim.claim.lease_expires_at)
+    table.add_row("job.expiresAt", claim.job.expires_at)
+    table.add_row("input", _preview_json(claim.job.input_.to_dict()))
     console.print(table)
 
 
@@ -179,7 +214,76 @@ def acquire(
         raise typer.Exit(code=1)
 
     ensure_client_available()
+    mode = mode.lower()
+    if mode not in {"single", "wait", "drain"}:
+        console.print("[red]Invalid mode. Use single, wait, or drain.[/red]")
+        raise typer.Exit(code=1)
+
     profile = state.config.get_active_profile()
+    if state.training_mode:
+        if mode != "single":
+            console.print("[red]Training acquire only supports --mode single.[/red]")
+            raise typer.Exit(code=1)
+        if task_type and job_id:
+            console.print("[red]Provide only one of --task-type or --job in training mode.[/red]")
+            raise typer.Exit(code=1)
+        client = build_client(state.base_url)
+        lease_body = PostV1TrainingLeaseBody(
+            task_type=task_type if task_type else UNSET,
+            exercise_id=job_id if job_id else UNSET,
+        )
+        response = training_lease(
+            client=client,
+            body=lease_body,
+        )
+        if int(response.status_code) != 200:
+            payload = _parse_json_body(response)
+            if json_output:
+                console.print(payload)
+            else:
+                console.print(
+                    f"[red]Training lease failed (status={response.status_code}).[/red] {payload or ''}"
+                )
+            raise typer.Exit(code=1 if response.status_code in {400, 409, 422} else 2)
+
+        if response.parsed is None:
+            console.print("[red]Invalid training lease response payload.[/red]")
+            raise typer.Exit(code=2)
+
+        payload = response.parsed.to_dict()
+        lease = response.parsed.lease
+        exercise = response.parsed.exercise
+
+        lease_id = lease.lease_id
+        exercise_id = exercise.id
+        submit_token = lease.submit_token
+
+        cache = ClaimsCache.load()
+        cache.set_claim(state.profile_name, exercise_id, f"{lease_id}:{submit_token}")
+        cache.save()
+
+        if json_output:
+            console.print(payload)
+            return
+
+        table = Table(title="Training Lease Acquired")
+        table.add_column("Field")
+        table.add_column("Value")
+        table.add_row("lease.id", lease_id)
+        table.add_row("exercise.id", exercise_id)
+        table.add_row("exercise.title", exercise.title)
+        table.add_row("taskType", exercise.task_type)
+        table.add_row("expiresAt", lease.expires_at.isoformat())
+        table.add_row("submitToken", submit_token)
+        table.add_row("prompt", exercise.prompt)
+        table.add_row("input", _preview_json(exercise.input_.to_dict()))
+        table.add_row(
+            "acceptanceContract",
+            _preview_json(exercise.acceptance_contract.to_dict()),
+        )
+        console.print(table)
+        return
+
     if not profile.worker_api_key:
         console.print("[red]Worker API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
@@ -285,10 +389,6 @@ def acquire(
             raise typer.Exit(code=1)
         raise typer.Exit(code=2)
 
-    mode = mode.lower()
-    if mode not in {"single", "wait", "drain"}:
-        console.print("[red]Invalid mode. Use single, wait, or drain.[/red]")
-        raise typer.Exit(code=1)
     if bool(task_type) == bool(job_id):
         console.print("[red]Provide exactly one of --task-type or --job.[/red]")
         raise typer.Exit(code=1)

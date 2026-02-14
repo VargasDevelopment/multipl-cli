@@ -24,12 +24,18 @@ from multipl_cli._client.api.jobs.get_v_1_jobs_job_id_stages import (
 from multipl_cli._client.api.jobs.post_v_1_jobs_job_id_review import (
     sync_detailed as post_job_review,
 )
+from multipl_cli._client.api.training.post_v1_training_validate_job import (
+    sync_detailed as training_validate_job,
+)
 from multipl_cli._client.api.public.get_v1_public_jobs import sync_detailed as list_public_jobs
 from multipl_cli._client.api.public.get_v_1_public_jobs_job_id import (
     sync_detailed as get_public_job,
 )
 from multipl_cli._client.api.templates.get_v1_templates_id import (
     sync_detailed as get_template_by_id,
+)
+from multipl_cli._client.api.training.get_v1_training_templates_id import (
+    sync_detailed as get_training_template_by_id,
 )
 from multipl_cli._client.models.get_v1_jobs_lane import GetV1JobsLane
 from multipl_cli._client.models.get_v1_templates_id_response_200 import (
@@ -46,6 +52,9 @@ from multipl_cli._client.models.post_v1_jobs_job_id_review_body import (
 )
 from multipl_cli._client.models.post_v1_jobs_job_id_review_body_decision import (
     PostV1JobsJobIdReviewBodyDecision,
+)
+from multipl_cli._client.models.post_v1_training_validate_job_body import (
+    PostV1TrainingValidateJobBody,
 )
 from multipl_cli._client.types import UNSET
 from multipl_cli.app_state import AppState
@@ -514,9 +523,23 @@ def _load_template_from_file(template_file: Path) -> GetV1TemplatesIdResponse200
         raise typer.BadParameter(f"Invalid template file: {exc}") from exc
 
 
-def _fetch_template_from_api(*, base_url: str, poster_api_key: str, template_id: str) -> GetV1TemplatesIdResponse200:
-    client = build_client(base_url, api_key=poster_api_key)
-    response = get_template_by_id(id=template_id, client=client)
+def _fetch_template_from_api(
+    *,
+    base_url: str,
+    template_id: str,
+    training_mode: bool,
+    poster_api_key: str | None,
+) -> Any:
+    if training_mode:
+        client = build_client(base_url)
+        response = get_training_template_by_id(id=template_id, client=client)
+    else:
+        if not poster_api_key:
+            console.print("[red]Poster API key not configured for active profile.[/red]")
+            raise typer.Exit(code=2)
+        client = build_client(base_url, api_key=poster_api_key)
+        response = get_template_by_id(id=template_id, client=client)
+
     if response.status_code == 200 and response.parsed is not None:
         return response.parsed
 
@@ -525,7 +548,12 @@ def _fetch_template_from_api(*, base_url: str, poster_api_key: str, template_id:
         raise typer.Exit(code=1)
 
     if response.status_code in {401, 403}:
-        console.print("[red]Poster key required or invalid key.[/red]")
+        if training_mode:
+            console.print(
+                "[red]Training template endpoint unavailable for current base URL/profile.[/red]"
+            )
+        else:
+            console.print("[red]Poster key required or invalid key.[/red]")
         body = _parse_response_json(response)
         if body is not None:
             console.print(body)
@@ -550,11 +578,18 @@ def _review_job(
 ) -> None:
     ensure_client_available()
     profile = state.config.get_active_profile()
-    if not profile.poster_api_key:
+    if state.training_mode:
+        console.print(
+            "[red]`multipl job review` is unavailable in training mode. "
+            "Training exercises are graded via `multipl submit send`.[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    if not state.training_mode and not profile.poster_api_key:
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
-    client = build_client(state.base_url)
+    client = build_client(state.base_url, api_key=profile.poster_api_key)
     body = PostV1JobsJobIdReviewBody(
         decision=decision,
         reason=note if note else UNSET,
@@ -562,7 +597,6 @@ def _review_job(
     response = post_job_review(
         client=client,
         job_id=job_id,
-        authorization=f"Bearer {profile.poster_api_key}",
         body=body,
     )
 
@@ -753,9 +787,16 @@ def get_job_cmd(
     ensure_client_available()
     profile = state.config.get_active_profile()
 
+    if state.training_mode:
+        console.print(
+            "[red]`multipl job get` is unavailable in training mode. "
+            "Training exercises are ephemeral and not queryable via /v1/jobs.[/red]"
+        )
+        raise typer.Exit(code=1)
+
     if not public and profile.poster_api_key:
-        client = build_client(state.base_url)
-        response = get_job(client=client, job_id=job_id, authorization=f"Bearer {profile.poster_api_key}")
+        client = build_client(state.base_url, api_key=profile.poster_api_key)
+        response = get_job(client=client, job_id=job_id)
         if response.status_code == 200 and response.parsed is not None:
             console.print(response.parsed.to_dict() if json_output else response.parsed.to_dict())
             return
@@ -785,14 +826,19 @@ def preview_job(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
-    if not profile.poster_api_key:
+    if state.training_mode:
+        console.print(
+            "[red]`multipl job preview` is unavailable in training mode. "
+            "Training exercises are graded via `multipl submit send`.[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    if not state.training_mode and not profile.poster_api_key:
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
-    client = build_client(state.base_url)
-    response = get_job_preview(
-        client=client, job_id=job_id, authorization=f"Bearer {profile.poster_api_key}"
-    )
+    client = build_client(state.base_url, api_key=profile.poster_api_key)
+    response = get_job_preview(client=client, job_id=job_id)
 
     if response.status_code == 200:
         if response.parsed is not None:
@@ -893,16 +939,19 @@ def get_job_stages_cmd(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
-    if not profile.poster_api_key:
+    if state.training_mode:
+        console.print(
+            "[red]`multipl job stages` is unavailable in training mode. "
+            "Training exercises are not persisted as staged jobs.[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    if not state.training_mode and not profile.poster_api_key:
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
-    client = build_client(state.base_url)
-    response = get_job_stages(
-        client=client,
-        job_id=job_id,
-        authorization=f"Bearer {profile.poster_api_key}",
-    )
+    client = build_client(state.base_url, api_key=profile.poster_api_key)
+    response = get_job_stages(client=client, job_id=job_id)
 
     if response.status_code == 200:
         payload = response.parsed.to_dict() if response.parsed is not None else (_parse_response_json(response) or {})
@@ -1044,7 +1093,7 @@ def create_job(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
-    if not profile.poster_api_key:
+    if not state.training_mode and not profile.poster_api_key:
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
@@ -1082,8 +1131,9 @@ def create_job(
                 raise typer.Exit(code=1)
             template_payload = _fetch_template_from_api(
                 base_url=state.base_url,
-                poster_api_key=profile.poster_api_key,
                 template_id=template,
+                training_mode=state.training_mode,
+                poster_api_key=profile.poster_api_key,
             )
 
         if from_gh is not None:
@@ -1193,6 +1243,47 @@ def create_job(
 
     if dry_run:
         console.print_json(data=request_payload)
+        return
+
+    if state.training_mode:
+        client = build_client(state.base_url)
+        response = training_validate_job(
+            client=client,
+            body=PostV1TrainingValidateJobBody.from_dict(request_payload),
+        )
+        if int(response.status_code) != 200:
+            console.print(
+                f"[red]Training validation failed (status={response.status_code}).[/red]"
+            )
+            parsed_error = _parse_response_json(response)
+            if parsed_error is not None:
+                console.print(parsed_error)
+            raise typer.Exit(code=2)
+
+        if response.parsed is None:
+            console.print("[red]Invalid training validation response payload.[/red]")
+            raise typer.Exit(code=2)
+
+        payload = response.parsed.to_dict()
+        passed = response.parsed.pass_
+        diagnostics = payload.get("diagnostics", [])
+        if json_output:
+            console.print(payload)
+        else:
+            console.print("[green]Training validation: PASS[/green]" if passed else "[red]Training validation: FAIL[/red]")
+            if diagnostics:
+                for diagnostic in diagnostics:
+                    if not isinstance(diagnostic, dict):
+                        continue
+                    code = diagnostic.get("code") or "diagnostic"
+                    path = diagnostic.get("path")
+                    message = diagnostic.get("message") or "validation issue"
+                    if path:
+                        console.print(f"- {code} ({path}): {message}")
+                    else:
+                        console.print(f"- {code}: {message}")
+        if not passed:
+            raise typer.Exit(code=1)
         return
 
     if proof and proof_file:

@@ -55,7 +55,7 @@ def _state(base_url: str) -> AppState:
 def test_wallet_set_defaults_to_base_on_non_local_urls(monkeypatch) -> None:
     captured_networks: list[str] = []
 
-    def fake_set_worker_wallet(*, client, authorization, body):
+    def fake_set_worker_wallet(*, client, body):
         captured_networks.append(str(body.network))
         return _FakeResponse(
             status_code=200,
@@ -71,7 +71,7 @@ def test_wallet_set_defaults_to_base_on_non_local_urls(monkeypatch) -> None:
         )
 
     monkeypatch.setattr(auth, "ensure_client_available", lambda: None)
-    monkeypatch.setattr(auth, "build_client", lambda _base_url: object())
+    monkeypatch.setattr(auth, "build_client", lambda _base_url, **_kwargs: object())
     monkeypatch.setattr(auth, "set_worker_wallet", fake_set_worker_wallet)
 
     runner = CliRunner()
@@ -88,7 +88,7 @@ def test_wallet_set_defaults_to_base_on_non_local_urls(monkeypatch) -> None:
 def test_wallet_set_defaults_to_local_for_localhost_urls(monkeypatch) -> None:
     captured_networks: list[str] = []
 
-    def fake_set_worker_wallet(*, client, authorization, body):
+    def fake_set_worker_wallet(*, client, body):
         captured_networks.append(str(body.network))
         return _FakeResponse(
             status_code=200,
@@ -104,7 +104,7 @@ def test_wallet_set_defaults_to_local_for_localhost_urls(monkeypatch) -> None:
         )
 
     monkeypatch.setattr(auth, "ensure_client_available", lambda: None)
-    monkeypatch.setattr(auth, "build_client", lambda _base_url: object())
+    monkeypatch.setattr(auth, "build_client", lambda _base_url, **_kwargs: object())
     monkeypatch.setattr(auth, "set_worker_wallet", fake_set_worker_wallet)
 
     runner = CliRunner()
@@ -121,7 +121,7 @@ def test_wallet_set_defaults_to_local_for_localhost_urls(monkeypatch) -> None:
 def test_wallet_set_network_override_takes_priority(monkeypatch) -> None:
     captured_networks: list[str] = []
 
-    def fake_set_worker_wallet(*, client, authorization, body):
+    def fake_set_worker_wallet(*, client, body):
         captured_networks.append(str(body.network))
         return _FakeResponse(
             status_code=200,
@@ -137,7 +137,7 @@ def test_wallet_set_network_override_takes_priority(monkeypatch) -> None:
         )
 
     monkeypatch.setattr(auth, "ensure_client_available", lambda: None)
-    monkeypatch.setattr(auth, "build_client", lambda _base_url: object())
+    monkeypatch.setattr(auth, "build_client", lambda _base_url, **_kwargs: object())
     monkeypatch.setattr(auth, "set_worker_wallet", fake_set_worker_wallet)
 
     runner = CliRunner()

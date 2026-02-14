@@ -35,7 +35,13 @@ from multipl_cli._client.models.put_v1_workers_me_wallet_body import PutV1Worker
 from multipl_cli._client.types import UNSET
 from multipl_cli.app_state import AppState
 from multipl_cli.commands import poster_wallet
-from multipl_cli.config import DEFAULT_BASE_URL, load_config, mask_secret, save_config
+from multipl_cli.config import (
+    DEFAULT_BASE_URL,
+    is_training_base_url,
+    load_config,
+    mask_secret,
+    save_config,
+)
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
 from multipl_cli.polling import extract_retry_after_seconds
@@ -64,7 +70,14 @@ def _state_from_ctx(ctx: typer.Context | None) -> AppState:
     if ctx is not None and isinstance(ctx.obj, AppState):
         return ctx.obj
     config = load_config()
-    return AppState(config=config, profile_name=config.active_profile, base_url=config.base_url)
+    active_profile = config.get_active_profile()
+    base_url = active_profile.base_url or config.base_url
+    return AppState(
+        config=config,
+        profile_name=config.active_profile,
+        base_url=base_url,
+        training_mode=is_training_base_url(base_url),
+    )
 
 
 def _resolve_base_url(config_base_url: str | None, override: str | None) -> str:
@@ -194,7 +207,6 @@ def _whoami_payload(
 ) -> dict[str, Any]:
     ensure_client_available()
     profile = state.config.get_active_profile()
-    client = build_client(state.base_url)
 
     if not profile.worker_api_key and not profile.poster_api_key:
         raise AuthError(
@@ -204,7 +216,8 @@ def _whoami_payload(
     payload: dict[str, Any] = {}
 
     if profile.worker_api_key:
-        response = get_worker_me(client=client, authorization=f"Bearer {profile.worker_api_key}")
+        worker_client = build_client(state.base_url, api_key=profile.worker_api_key)
+        response = get_worker_me(client=worker_client)
         if response.status_code == 200 and response.parsed is not None:
             worker = response.parsed.worker
             payload["worker"] = worker.to_dict()
@@ -219,9 +232,7 @@ def _whoami_payload(
                     },
                 )
 
-            metrics = get_worker_metrics(
-                client=client, authorization=f"Bearer {profile.worker_api_key}"
-            )
+            metrics = get_worker_metrics(client=worker_client)
             if metrics.status_code == 200 and metrics.parsed is not None:
                 payload["worker_metrics"] = metrics.parsed.to_dict()
                 if show_output and not json_output:
@@ -233,9 +244,8 @@ def _whoami_payload(
                 )
 
     if profile.poster_api_key:
-        metrics = get_poster_metrics(
-            client=client, authorization=f"Bearer {profile.poster_api_key}"
-        )
+        poster_client = build_client(state.base_url, api_key=profile.poster_api_key)
+        metrics = get_poster_metrics(client=poster_client)
         if metrics.status_code == 200 and metrics.parsed is not None:
             payload["poster_metrics"] = metrics.parsed.to_dict()
             if show_output and not json_output:
@@ -300,6 +310,23 @@ def login(
         if not register_poster_flag and not register_worker_flag:
             console.print("[red]Select at least one identity to register.[/red]")
             raise typer.Exit(code=1)
+
+    if is_training_base_url(effective_base_url):
+        save_config(config)
+        if json_output:
+            console.print(
+                {
+                    "profile": profile_name,
+                    "base_url": effective_base_url,
+                    "mode": "training",
+                    "note": "Training mode does not require auth registration, wallet setup, or payer configuration.",
+                }
+            )
+        else:
+            console.print(
+                "[yellow]Training mode active: auth registration is optional and wallet/payer setup is skipped.[/yellow]"
+            )
+        return
 
     ensure_client_available()
     client = build_client(effective_base_url)
@@ -366,7 +393,7 @@ def login(
                     "Worker claim info saved to profile. Run `multipl auth claim-worker`."
                 )
 
-    if profile.worker_api_key and not non_interactive:
+    if profile.worker_api_key and not non_interactive and not is_training_base_url(effective_base_url):
         if typer.confirm("Set worker wallet payout address now? (optional)", default=False):
             address = typer.prompt("Worker wallet address")
             if not (address.startswith("0x") and len(address) == 42):
@@ -374,9 +401,12 @@ def login(
                 raise typer.Exit(code=1)
             resolved_network = _resolve_worker_wallet_network(base_url=effective_base_url)
             try:
+                wallet_client = build_client(
+                    effective_base_url,
+                    api_key=profile.worker_api_key,
+                )
                 wallet_response = set_worker_wallet(
-                    client=client,
-                    authorization=f"Bearer {profile.worker_api_key}",
+                    client=wallet_client,
                     body=PutV1WorkersMeWalletBody(address=address, network=resolved_network),
                 )
             except httpx.HTTPError as exc:
@@ -406,7 +436,11 @@ def login(
                 )
                 raise typer.Exit(code=2)
 
-    if config.payer.type != "local_key" and not non_interactive:
+    if (
+        config.payer.type != "local_key"
+        and not non_interactive
+        and not is_training_base_url(effective_base_url)
+    ):
         if typer.confirm("Set payer to local_key (recommended)?", default=True):
             config.payer.type = "local_key"
             summary["payer"] = config.payer.type
@@ -417,7 +451,12 @@ def login(
 
     save_config(config)
 
-    state = AppState(config=config, profile_name=profile_name, base_url=effective_base_url)
+    state = AppState(
+        config=config,
+        profile_name=profile_name,
+        base_url=effective_base_url,
+        training_mode=is_training_base_url(effective_base_url),
+    )
     if ctx is not None:
         ctx.obj = state
 
@@ -560,7 +599,7 @@ def claim_worker_command(
     resolved_verification_code = verification_code or profile.worker_claim_verification_code
 
     ensure_client_available()
-    client = build_client(state.base_url)
+    client = build_client(state.base_url, api_key=profile.poster_api_key)
 
     body = PostV1WorkersClaimBody(
         claim_token=resolved_claim_token,
@@ -570,7 +609,6 @@ def claim_worker_command(
     try:
         response = claim_worker_api(
             client=client,
-            authorization=f"Bearer {profile.poster_api_key}",
             body=body,
         )
     except httpx.HTTPError as exc:
@@ -739,6 +777,13 @@ def wallet_set_command(
         raise typer.Exit(code=1)
 
     state = _state_from_ctx(ctx)
+    if state.training_mode:
+        console.print(
+            "[red]Worker wallet commands are disabled in training mode. "
+            "Training does not require a wallet.[/red]"
+        )
+        raise typer.Exit(code=1)
+
     config = state.config
     profile = config.ensure_profile(profile_name or config.active_profile)
 
@@ -747,7 +792,7 @@ def wallet_set_command(
         raise typer.Exit(code=1)
 
     ensure_client_available()
-    client = build_client(state.base_url)
+    client = build_client(state.base_url, api_key=profile.worker_api_key)
     resolved_network = _resolve_worker_wallet_network(
         base_url=state.base_url,
         requested_network=network,
@@ -756,7 +801,6 @@ def wallet_set_command(
     try:
         response = set_worker_wallet(
             client=client,
-            authorization=f"Bearer {profile.worker_api_key}",
             body=PutV1WorkersMeWalletBody(address=address, network=resolved_network),
         )
     except httpx.HTTPError as exc:

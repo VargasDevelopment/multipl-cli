@@ -222,7 +222,7 @@ def test_job_create_request_file_mode_allows_task_type_override(monkeypatch, tmp
 
 def test_job_stages_calls_endpoint_and_renders_pipeline(monkeypatch) -> None:
     monkeypatch.setattr(job, "ensure_client_available", lambda: None)
-    monkeypatch.setattr(job, "build_client", lambda _base_url: object())
+    monkeypatch.setattr(job, "build_client", lambda _base_url, **_kwargs: object())
 
     payload = {
         "rootJobId": "root-stage-job",
@@ -232,9 +232,8 @@ def test_job_stages_calls_endpoint_and_renders_pipeline(monkeypatch) -> None:
         ],
     }
 
-    def fake_get_job_stages(*, client, job_id, authorization):
+    def fake_get_job_stages(*, client, job_id):
         assert job_id == "job_123"
-        assert authorization == "Bearer poster_test_key"
         return _FakeDetailedResponse(status_code=200, parsed=_ParsedPayload(payload))
 
     monkeypatch.setattr(job, "get_job_stages", fake_get_job_stages)
