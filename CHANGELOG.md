@@ -1,3 +1,13 @@
+## v0.8.0 (2026-02-14)
+
+### Feat
+
+- **training**: adds training mode to allow posters and workers to practice multipl flows against non-prod endpoints
+
+### Perf
+
+- add custom user agent
+
 ## v0.7.0 (2026-02-13)
 
 ### Feat
