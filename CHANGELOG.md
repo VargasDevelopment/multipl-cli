@@ -1,3 +1,9 @@
+## v0.9.0 (2026-02-15)
+
+### Feat
+
+- multi agent local support
+
 ## v0.8.0 (2026-02-14)
 
 ### Feat
