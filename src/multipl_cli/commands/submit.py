@@ -17,7 +17,7 @@ from multipl_cli._client.models.post_v1_claims_claim_id_submit_body import (
 from multipl_cli._client.models.post_v1_training_submit_body import PostV1TrainingSubmitBody
 from multipl_cli.acceptance import validate_acceptance
 from multipl_cli.app_state import AppState
-from multipl_cli.config import ClaimsCache
+from multipl_cli.config import ClaimsCache, resolve_worker_api_key
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
 
@@ -174,7 +174,8 @@ def send(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
-    if not state.training_mode and not profile.worker_api_key:
+    worker_api_key = resolve_worker_api_key(profile)
+    if not state.training_mode and not worker_api_key:
         console.print("[red]Worker API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
@@ -296,7 +297,7 @@ def send(
         "post",
         f"/v1/claims/{resolved_claim_id}/submit",
         headers={
-            "authorization": f"Bearer {profile.worker_api_key}",
+            "authorization": f"Bearer {worker_api_key}",
             "Content-Type": "application/json",
         },
         json=submit_payload,

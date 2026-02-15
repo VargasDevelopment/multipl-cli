@@ -8,7 +8,11 @@ from multipl_cli import polling_lock
 
 
 def _configure_tmp_lock_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(polling_lock, "config_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        polling_lock,
+        "get_lock_path",
+        lambda name: tmp_path / "locks" / f"{name}.lock",
+    )
 
 
 def test_acquire_loop_lock_creates_and_releases_lock_file(

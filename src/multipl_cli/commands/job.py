@@ -58,6 +58,7 @@ from multipl_cli._client.models.post_v1_training_validate_job_body import (
 )
 from multipl_cli._client.types import UNSET
 from multipl_cli.app_state import AppState
+from multipl_cli.config import resolve_poster_api_key
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
 from multipl_cli.polling import extract_retry_after_seconds, sleep_with_jitter
@@ -578,6 +579,7 @@ def _review_job(
 ) -> None:
     ensure_client_available()
     profile = state.config.get_active_profile()
+    poster_api_key = resolve_poster_api_key(profile)
     if state.training_mode:
         console.print(
             "[red]`multipl job review` is unavailable in training mode. "
@@ -585,11 +587,11 @@ def _review_job(
         )
         raise typer.Exit(code=1)
 
-    if not state.training_mode and not profile.poster_api_key:
+    if not state.training_mode and not poster_api_key:
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
-    client = build_client(state.base_url, api_key=profile.poster_api_key)
+    client = build_client(state.base_url, api_key=poster_api_key)
     body = PostV1JobsJobIdReviewBody(
         decision=decision,
         reason=note if note else UNSET,
@@ -786,6 +788,7 @@ def get_job_cmd(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
+    poster_api_key = resolve_poster_api_key(profile)
 
     if state.training_mode:
         console.print(
@@ -794,8 +797,8 @@ def get_job_cmd(
         )
         raise typer.Exit(code=1)
 
-    if not public and profile.poster_api_key:
-        client = build_client(state.base_url, api_key=profile.poster_api_key)
+    if not public and poster_api_key:
+        client = build_client(state.base_url, api_key=poster_api_key)
         response = get_job(client=client, job_id=job_id)
         if response.status_code == 200 and response.parsed is not None:
             console.print(response.parsed.to_dict() if json_output else response.parsed.to_dict())
@@ -826,6 +829,7 @@ def preview_job(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
+    poster_api_key = resolve_poster_api_key(profile)
     if state.training_mode:
         console.print(
             "[red]`multipl job preview` is unavailable in training mode. "
@@ -833,11 +837,11 @@ def preview_job(
         )
         raise typer.Exit(code=1)
 
-    if not state.training_mode and not profile.poster_api_key:
+    if not state.training_mode and not poster_api_key:
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
-    client = build_client(state.base_url, api_key=profile.poster_api_key)
+    client = build_client(state.base_url, api_key=poster_api_key)
     response = get_job_preview(client=client, job_id=job_id)
 
     if response.status_code == 200:
@@ -939,6 +943,7 @@ def get_job_stages_cmd(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
+    poster_api_key = resolve_poster_api_key(profile)
     if state.training_mode:
         console.print(
             "[red]`multipl job stages` is unavailable in training mode. "
@@ -946,11 +951,11 @@ def get_job_stages_cmd(
         )
         raise typer.Exit(code=1)
 
-    if not state.training_mode and not profile.poster_api_key:
+    if not state.training_mode and not poster_api_key:
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
-    client = build_client(state.base_url, api_key=profile.poster_api_key)
+    client = build_client(state.base_url, api_key=poster_api_key)
     response = get_job_stages(client=client, job_id=job_id)
 
     if response.status_code == 200:
@@ -1093,7 +1098,8 @@ def create_job(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
-    if not state.training_mode and not profile.poster_api_key:
+    poster_api_key = resolve_poster_api_key(profile)
+    if not state.training_mode and not poster_api_key:
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
@@ -1133,7 +1139,7 @@ def create_job(
                 base_url=state.base_url,
                 template_id=template,
                 training_mode=state.training_mode,
-                poster_api_key=profile.poster_api_key,
+                poster_api_key=poster_api_key,
             )
 
         if from_gh is not None:
@@ -1319,7 +1325,7 @@ def create_job(
 
     def request_fn(extra_headers: dict[str, str] | None):
         headers = {
-            "authorization": f"Bearer {profile.poster_api_key}",
+            "authorization": f"Bearer {poster_api_key}",
             "x-idempotency-key": idempotency_key,
             "Content-Type": "application/json",
         }

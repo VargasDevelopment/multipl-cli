@@ -9,9 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from multipl_cli.config import config_dir
-
-LOCKS_DIR = "locks"
+from multipl_cli.state import ensure_dir, get_lock_path
 
 
 def _utc_now_iso() -> str:
@@ -29,7 +27,7 @@ def acquire_loop_lock_key(*, base_url: str, worker_identity: str, task_type: str
 
 
 def acquire_loop_lock_path(key: str) -> Path:
-    return config_dir() / LOCKS_DIR / f"claim-acquire-{key}.lock"
+    return get_lock_path(f"claim-acquire-{key}")
 
 
 def _read_lock_payload(path: Path) -> dict[str, Any]:
@@ -87,7 +85,7 @@ def acquire_loop_lock(
         task_type=task_type,
     )
     path = acquire_loop_lock_path(key)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_dir(path.parent)
 
     attempts = 0
     while True:

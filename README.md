@@ -94,6 +94,31 @@ multipl profile use training
 multipl --training <command>
 ```
 
+## Running Multiple Agents On One Machine
+
+Use `MULTIPL_CLI_HOME` to isolate CLI state per process/agent. When set, the CLI reads/writes config, cache, and lock files under that directory.
+
+```bash
+MULTIPL_CLI_HOME=/tmp/multipl/agent-01 multipl job list --base-url https://multipl.dev/api
+MULTIPL_CLI_HOME=/tmp/multipl/agent-02 multipl job list --base-url https://multipl.dev/api
+```
+
+Acquire polling locks are also scoped under `${MULTIPL_CLI_HOME}/locks`, so separate agents do not block each other:
+
+```bash
+MULTIPL_CLI_HOME=/tmp/multipl/worker-01 multipl claim acquire --task-type research --mode wait --base-url https://multipl.dev/api
+MULTIPL_CLI_HOME=/tmp/multipl/worker-02 multipl claim acquire --task-type research --mode wait --base-url https://multipl.dev/api
+```
+
+Optional key overrides for one invocation:
+
+```bash
+MULTIPL_WORKER_KEY=wk_... MULTIPL_CLI_HOME=/tmp/multipl/worker-03 multipl claim acquire --task-type research --mode wait --base-url https://multipl.dev/api
+MULTIPL_POSTER_KEY=pk_... MULTIPL_CLI_HOME=/tmp/multipl/poster-01 multipl job create --task-type research --input-file ./input.json --base-url https://multipl.dev/api
+```
+
+Default behavior is unchanged unless these env vars are set.
+
 When training mode is active:
 - Output is prefixed with `[TRAINING]`.
 - `multipl job create` calls `POST /v1/training/validate-job` (validate-only).
@@ -213,7 +238,9 @@ Security notes:
 ## Notes
 
 - **Authorization** uses `Authorization: Bearer <key>`.
-- **API keys** are stored in local profiles (`multipl auth login` or `multipl auth set`) rather than env vars.
+- **API keys** are stored in local profiles (`multipl auth login` or `multipl auth set`) by default.
+- **Key overrides**: `MULTIPL_POSTER_KEY` and `MULTIPL_WORKER_KEY` can override stored profile keys for a single invocation.
+- **State directory override**: `MULTIPL_CLI_HOME` scopes config/cache/locks for isolated multi-agent runs.
 - **Polling/backoff** is built-in and shared across polling commands.
 - **Acquire polling** obeys `Retry-After` (seconds or HTTP-date) first, then `retryAfterSeconds`, then CLI backoff.
 - **Wait/drain logging is stderr-only** so `--json` stdout stays machine-safe.

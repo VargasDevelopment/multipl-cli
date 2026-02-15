@@ -40,6 +40,8 @@ from multipl_cli.config import (
     is_training_base_url,
     load_config,
     mask_secret,
+    resolve_poster_api_key,
+    resolve_worker_api_key,
     save_config,
 )
 from multipl_cli.console import console
@@ -207,16 +209,18 @@ def _whoami_payload(
 ) -> dict[str, Any]:
     ensure_client_available()
     profile = state.config.get_active_profile()
+    worker_api_key = resolve_worker_api_key(profile)
+    poster_api_key = resolve_poster_api_key(profile)
 
-    if not profile.worker_api_key and not profile.poster_api_key:
+    if not worker_api_key and not poster_api_key:
         raise AuthError(
             "No keys configured. Run `multipl auth login` or `multipl auth register ...`"
         )
 
     payload: dict[str, Any] = {}
 
-    if profile.worker_api_key:
-        worker_client = build_client(state.base_url, api_key=profile.worker_api_key)
+    if worker_api_key:
+        worker_client = build_client(state.base_url, api_key=worker_api_key)
         response = get_worker_me(client=worker_client)
         if response.status_code == 200 and response.parsed is not None:
             worker = response.parsed.worker
@@ -243,8 +247,8 @@ def _whoami_payload(
                     f"[red]Failed to fetch worker info (status={response.status_code}).[/red]"
                 )
 
-    if profile.poster_api_key:
-        poster_client = build_client(state.base_url, api_key=profile.poster_api_key)
+    if poster_api_key:
+        poster_client = build_client(state.base_url, api_key=poster_api_key)
         metrics = get_poster_metrics(client=poster_client)
         if metrics.status_code == 200 and metrics.parsed is not None:
             payload["poster_metrics"] = metrics.parsed.to_dict()
@@ -584,7 +588,8 @@ def claim_worker_command(
         raise typer.Exit(code=1)
     profile = config.ensure_profile(profile_name or config.active_profile)
 
-    if not profile.poster_api_key:
+    poster_api_key = resolve_poster_api_key(profile)
+    if not poster_api_key:
         console.print("[red]Poster API key not configured for this profile.[/red]")
         raise typer.Exit(code=2)
 
@@ -599,7 +604,7 @@ def claim_worker_command(
     resolved_verification_code = verification_code or profile.worker_claim_verification_code
 
     ensure_client_available()
-    client = build_client(state.base_url, api_key=profile.poster_api_key)
+    client = build_client(state.base_url, api_key=poster_api_key)
 
     body = PostV1WorkersClaimBody(
         claim_token=resolved_claim_token,
@@ -787,12 +792,13 @@ def wallet_set_command(
     config = state.config
     profile = config.ensure_profile(profile_name or config.active_profile)
 
-    if not profile.worker_api_key:
+    worker_api_key = resolve_worker_api_key(profile)
+    if not worker_api_key:
         console.print("[red]Worker API key not configured for this profile.[/red]")
         raise typer.Exit(code=1)
 
     ensure_client_available()
-    client = build_client(state.base_url, api_key=profile.worker_api_key)
+    client = build_client(state.base_url, api_key=worker_api_key)
     resolved_network = _resolve_worker_wallet_network(
         base_url=state.base_url,
         requested_network=network,

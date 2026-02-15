@@ -7,28 +7,46 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from platformdirs import user_config_dir
+from multipl_cli.state import get_claims_path, get_config_path, get_state_dir
 
 APP_NAME = "multipl"
 APP_AUTHOR = "Multipl"
 
 CONFIG_FILE = "config.json"
 CLAIMS_FILE = "claims.json"
+MULTIPL_POSTER_KEY_ENV_VAR = "MULTIPL_POSTER_KEY"
+MULTIPL_WORKER_KEY_ENV_VAR = "MULTIPL_WORKER_KEY"
 
 DEFAULT_BASE_URL = "https://multipl.dev/api"
 TRAINING_BASE_URL = "https://train.multipl.dev/api"
 
 
 def config_dir() -> Path:
-    return Path(user_config_dir(APP_NAME, APP_AUTHOR))
+    return get_state_dir()
 
 
 def config_path() -> Path:
-    return config_dir() / CONFIG_FILE
+    return get_config_path()
 
 
 def claims_path() -> Path:
-    return config_dir() / CLAIMS_FILE
+    return get_claims_path()
+
+
+def _env_key(name: str) -> str | None:
+    value = os.environ.get(name)
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def resolve_poster_api_key(profile: "Profile") -> str | None:
+    return _env_key(MULTIPL_POSTER_KEY_ENV_VAR) or profile.poster_api_key
+
+
+def resolve_worker_api_key(profile: "Profile") -> str | None:
+    return _env_key(MULTIPL_WORKER_KEY_ENV_VAR) or profile.worker_api_key
 
 
 @dataclass

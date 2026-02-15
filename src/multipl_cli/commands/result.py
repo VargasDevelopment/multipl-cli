@@ -6,6 +6,7 @@ from pathlib import Path
 import typer
 
 from multipl_cli.app_state import AppState
+from multipl_cli.config import resolve_poster_api_key
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
 from multipl_cli.polling import extract_retry_after_seconds
@@ -40,7 +41,8 @@ def get_result(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
-    if not profile.poster_api_key:
+    poster_api_key = resolve_poster_api_key(profile)
+    if not poster_api_key:
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
@@ -71,7 +73,7 @@ def get_result(
     client = build_client(state.base_url)
 
     def request_fn(extra_headers: dict[str, str] | None):
-        headers = {"authorization": f"Bearer {profile.poster_api_key}"}
+        headers = {"authorization": f"Bearer {poster_api_key}"}
         if extra_headers:
             headers.update(extra_headers)
         return client.get_httpx_client().request(
