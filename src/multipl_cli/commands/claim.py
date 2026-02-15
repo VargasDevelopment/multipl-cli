@@ -24,7 +24,7 @@ from multipl_cli._client.models.post_v1_claims_claim_id_release_response_200 imp
 )
 from multipl_cli._client.types import UNSET
 from multipl_cli.app_state import AppState
-from multipl_cli.config import ClaimsCache
+from multipl_cli.config import ClaimsCache, resolve_worker_api_key
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
 from multipl_cli.polling import (
@@ -220,6 +220,7 @@ def acquire(
         raise typer.Exit(code=1)
 
     profile = state.config.get_active_profile()
+    worker_api_key = resolve_worker_api_key(profile)
     if state.training_mode:
         if mode != "single":
             console.print("[red]Training acquire only supports --mode single.[/red]")
@@ -284,7 +285,7 @@ def acquire(
         console.print(table)
         return
 
-    if not profile.worker_api_key:
+    if not worker_api_key:
         console.print("[red]Worker API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
@@ -301,7 +302,7 @@ def acquire(
             "post",
             "/v1/claims/acquire",
             headers={
-                "authorization": f"Bearer {profile.worker_api_key}",
+                "authorization": f"Bearer {worker_api_key}",
                 "Content-Type": "application/json",
             },
             json=body,
@@ -426,7 +427,7 @@ def acquire(
     try:
         lock = acquire_loop_lock(
             base_url=state.base_url,
-            worker_identity=_worker_identity(profile.worker_api_key),
+            worker_identity=_worker_identity(worker_api_key),
             task_type=task_type or "unknown",
             force=force,
         )
@@ -466,7 +467,8 @@ def release(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
-    if not profile.worker_api_key:
+    worker_api_key = resolve_worker_api_key(profile)
+    if not worker_api_key:
         console.print("[red]Worker API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
@@ -474,7 +476,7 @@ def release(
     response = client.get_httpx_client().request(
         "post",
         f"/v1/claims/{claim_id}/release",
-        headers={"authorization": f"Bearer {profile.worker_api_key}"},
+        headers={"authorization": f"Bearer {worker_api_key}"},
     )
 
     if response.status_code != 200:

@@ -11,6 +11,7 @@ from multipl_cli._client.api.metrics.get_v1_metrics_workers_me import (
 )
 from multipl_cli._client.api.workers.get_v1_workers_me import sync_detailed as get_worker_me
 from multipl_cli.app_state import AppState
+from multipl_cli.config import resolve_poster_api_key, resolve_worker_api_key
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
 
@@ -29,15 +30,17 @@ def whoami(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
+    worker_api_key = resolve_worker_api_key(profile)
+    poster_api_key = resolve_poster_api_key(profile)
 
-    if not profile.worker_api_key and not profile.poster_api_key:
+    if not worker_api_key and not poster_api_key:
         console.print("[yellow]No API keys configured for active profile.[/yellow]")
         raise typer.Exit(code=1)
 
     payload: dict = {}
 
-    if profile.worker_api_key:
-        worker_client = build_client(state.base_url, api_key=profile.worker_api_key)
+    if worker_api_key:
+        worker_client = build_client(state.base_url, api_key=worker_api_key)
         response = get_worker_me(client=worker_client)
         if response.status_code == 200 and response.parsed is not None:
             worker = response.parsed.worker
@@ -62,8 +65,8 @@ def whoami(
                 f"[red]Failed to fetch worker info (status={response.status_code}).[/red]"
             )
 
-    if profile.poster_api_key:
-        poster_client = build_client(state.base_url, api_key=profile.poster_api_key)
+    if poster_api_key:
+        poster_client = build_client(state.base_url, api_key=poster_api_key)
         metrics = get_poster_metrics(client=poster_client)
         if metrics.status_code == 200 and metrics.parsed is not None:
             payload["poster_metrics"] = metrics.parsed.to_dict()

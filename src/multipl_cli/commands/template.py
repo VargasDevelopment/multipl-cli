@@ -18,6 +18,7 @@ from multipl_cli._client.api.training.get_v1_training_templates_id import (
     sync_detailed as get_training_template_by_id,
 )
 from multipl_cli.app_state import AppState
+from multipl_cli.config import resolve_poster_api_key
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
 from multipl_cli.polling import extract_retry_after_seconds
@@ -76,7 +77,8 @@ def list_templates_cmd(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
-    if not state.training_mode and not profile.poster_api_key:
+    poster_api_key = resolve_poster_api_key(profile)
+    if not state.training_mode and not poster_api_key:
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
@@ -84,7 +86,7 @@ def list_templates_cmd(
         client = build_client(state.base_url)
         response = list_training_templates(client=client)
     else:
-        client = build_client(state.base_url, api_key=profile.poster_api_key)
+        client = build_client(state.base_url, api_key=poster_api_key)
         response = list_templates(client=client)
 
     if response.status_code == 429:
@@ -188,7 +190,8 @@ def get_template_cmd(
 
     ensure_client_available()
     profile = state.config.get_active_profile()
-    if not state.training_mode and not profile.poster_api_key:
+    poster_api_key = resolve_poster_api_key(profile)
+    if not state.training_mode and not poster_api_key:
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
@@ -196,7 +199,7 @@ def get_template_cmd(
         client = build_client(state.base_url)
         response = get_training_template_by_id(id=template_id, client=client)
     else:
-        client = build_client(state.base_url, api_key=profile.poster_api_key)
+        client = build_client(state.base_url, api_key=poster_api_key)
         response = get_template_by_id(id=template_id, client=client)
 
     if response.status_code in {401, 403}:

@@ -22,7 +22,7 @@ from multipl_cli._client.models.post_v1_posters_wallet_nonce_body import (
     PostV1PostersWalletNonceBody,
 )
 from multipl_cli.app_state import AppState
-from multipl_cli.config import is_training_base_url, load_config
+from multipl_cli.config import is_training_base_url, load_config, resolve_poster_api_key
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
 from multipl_cli.polling import extract_retry_after_seconds
@@ -198,12 +198,13 @@ def nonce(
         raise typer.Exit(code=1)
 
     profile = _resolve_profile(state, profile_name)
-    if not profile.poster_api_key:
+    poster_api_key = resolve_poster_api_key(profile)
+    if not poster_api_key:
         console.print("[red]Poster API key not configured for this profile.[/red]")
         raise typer.Exit(code=2)
 
     ensure_client_available()
-    client = build_client(state.base_url, api_key=profile.poster_api_key)
+    client = build_client(state.base_url, api_key=poster_api_key)
     payload = _request_nonce(client=client, address=wallet_address)
 
     if json_output:
@@ -239,12 +240,13 @@ def bind(
         raise typer.Exit(code=1)
 
     profile = _resolve_profile(state, profile_name)
-    if not profile.poster_api_key:
+    poster_api_key = resolve_poster_api_key(profile)
+    if not poster_api_key:
         console.print("[red]Poster API key not configured for this profile.[/red]")
         raise typer.Exit(code=2)
 
     ensure_client_available()
-    client = build_client(state.base_url, api_key=profile.poster_api_key)
+    client = build_client(state.base_url, api_key=poster_api_key)
     nonce_payload = _request_nonce(
         client=client,
         address=wallet_address,
