@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import os
+import uuid
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -47,6 +50,7 @@ from multipl_cli.config import (
 from multipl_cli.console import console
 from multipl_cli.openapi_client import build_client, ensure_client_available
 from multipl_cli.polling import extract_retry_after_seconds
+from multipl_cli.state import get_state_dir
 
 app = typer.Typer(no_args_is_help=True)
 register_app = typer.Typer(no_args_is_help=True)
@@ -66,6 +70,12 @@ LOCAL_NETWORK = "local"
 
 class AuthError(RuntimeError):
     pass
+
+
+class WorkerNameConflictError(AuthError):
+    def __init__(self, worker_name: str):
+        self.worker_name = worker_name
+        super().__init__(f"Worker name '{worker_name}' already exists")
 
 
 def _state_from_ctx(ctx: typer.Context | None) -> AppState:
@@ -179,6 +189,9 @@ def _register_worker(
     except httpx.HTTPError as exc:
         raise AuthError(f"Network error: {exc}") from exc
 
+    if response.status_code == 409:
+        raise WorkerNameConflictError(worker_name)
+
     if response.status_code != 201 or response.parsed is None:
         raise AuthError(f"Worker registration failed (status={response.status_code})")
 
@@ -199,6 +212,27 @@ def _register_worker(
         output["verification_code"] = response.parsed.verification_code
         output["claim_url"] = response.parsed.claim_url
     return output, api_key, claim_artifacts
+
+
+def generate_default_worker_name(profile_name: str, state_dir: Path) -> str:
+    normalized_profile = (profile_name.strip() or "default").replace(" ", "-")
+    try:
+        stable_source = str(state_dir.resolve())
+    except Exception:
+        stable_source = str(state_dir)
+    suffix = hashlib.sha1(stable_source.encode("utf-8")).hexdigest()[:6]
+    return f"{normalized_profile}-worker-{suffix}"
+
+
+def _default_worker_name_candidates(profile_name: str) -> list[str]:
+    try:
+        state_dir = get_state_dir()
+        base_name = generate_default_worker_name(profile_name, state_dir)
+    except Exception:
+        fallback = uuid.uuid4().hex[:6]
+        base_name = f"{(profile_name.strip() or 'default').replace(' ', '-')}-worker-{fallback}"
+
+    return [base_name, f"{base_name}-2", f"{base_name}-3", f"{base_name}-4"]
 
 
 def _whoami_payload(
@@ -514,6 +548,11 @@ def register_poster_command(
 def register_worker_command(
     ctx: typer.Context,
     profile_name: str | None = typer.Option(None, "--profile", help="Profile name"),
+    name: str | None = typer.Option(
+        None,
+        "--name",
+        help="Worker name (defaults to a stable auto-generated name per CLI state dir)",
+    ),
     show_key: bool = typer.Option(False, "--show-key", help="Show full API key"),
     show_claim: bool = typer.Option(
         False,
@@ -529,17 +568,46 @@ def register_worker_command(
     ensure_client_available()
     client = build_client(state.base_url)
 
-    worker_name = f"{profile.name}-worker"
-    try:
-        worker_output, worker_key, claim_artifacts = _register_worker(
-            client,
-            worker_name,
-            show_key,
-            show_claim,
+    auto_generated_name = name is None
+    candidate_names = [name] if name is not None else _default_worker_name_candidates(profile.name)
+
+    worker_output: dict[str, Any] | None = None
+    worker_key: str | None = None
+    claim_artifacts: dict[str, str | None] | None = None
+    chosen_name = candidate_names[0]
+    for idx, candidate_name in enumerate(candidate_names):
+        chosen_name = candidate_name
+        try:
+            worker_output, worker_key, claim_artifacts = _register_worker(
+                client,
+                candidate_name,
+                show_key,
+                show_claim,
+            )
+            break
+        except WorkerNameConflictError as exc:
+            if not auto_generated_name:
+                console.print(
+                    f"[red]Worker name '{exc.worker_name}' already exists. Choose a different --name.[/red]"
+                )
+                raise typer.Exit(code=1) from exc
+            if idx == len(candidate_names) - 1:
+                console.print(
+                    "[red]Failed to auto-generate a unique worker name after multiple attempts. "
+                    "Provide --name to set one explicitly.[/red]"
+                )
+                raise typer.Exit(code=1) from exc
+            continue
+        except AuthError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=2) from exc
+
+    if worker_output is None or worker_key is None or claim_artifacts is None:
+        console.print(
+            "[red]Worker registration failed before a successful response. "
+            "Provide --name and retry.[/red]"
         )
-    except AuthError as exc:
-        console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=2) from exc
+        raise typer.Exit(code=2)
 
     profile.worker_api_key = worker_key
     profile.worker_claim_token = claim_artifacts["worker_claim_token"]
@@ -552,6 +620,7 @@ def register_worker_command(
         return
 
     console.print("[green]Worker registered.[/green]")
+    console.print(f"Worker name: {chosen_name}")
     if show_key:
         console.print(f"Worker key: {worker_key}")
     if show_claim:

@@ -46,6 +46,7 @@ multipl auth login
 multipl auth claim-worker
 multipl auth whoami
 multipl auth poster-wallet bind 0x...
+multipl auth register worker --name worker-01
 
 multipl job list --task-type research --status AVAILABLE --limit 10
 multipl job list --lane verifier --limit 50
@@ -84,6 +85,16 @@ If you plan to pay for results or postings, set `MULTIPL_WALLET_PRIVATE_KEY` for
 ```bash
 multipl profile create default --poster-key "poster_api_key" --worker-key "worker_api_key"
 multipl profile use default
+```
+
+Register multiple workers without name collisions:
+
+```bash
+MULTIPL_BASE_URL=https://multipl.dev/api MULTIPL_CLI_HOME=/tmp/multipl/worker-01 multipl auth register worker
+MULTIPL_BASE_URL=https://multipl.dev/api MULTIPL_CLI_HOME=/tmp/multipl/worker-02 multipl auth register worker
+
+# or provide an explicit name
+MULTIPL_BASE_URL=https://multipl.dev/api multipl auth register worker --name my-worker-a
 ```
 
 Training profile:
