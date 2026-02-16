@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from types import FrameType
 from urllib.parse import urlparse
 
+import httpx
 import typer
 from rich.table import Table
 
@@ -233,10 +234,14 @@ def acquire(
             task_type=task_type if task_type else UNSET,
             exercise_id=job_id if job_id else UNSET,
         )
-        response = training_lease(
-            client=client,
-            body=lease_body,
-        )
+        try:
+            response = training_lease(
+                client=client,
+                body=lease_body,
+            )
+        except httpx.HTTPError as exc:
+            console.print(f"[red]Network error: {exc}[/red]")
+            raise typer.Exit(code=2) from exc
         if int(response.status_code) != 200:
             payload = _parse_json_body(response)
             if json_output:
@@ -401,7 +406,11 @@ def acquire(
         raise typer.Exit(code=1)
 
     if mode == "single":
-        response = request_once()
+        try:
+            response = request_once()
+        except httpx.HTTPError as exc:
+            console.print(f"[red]Network error: {exc}[/red]")
+            raise typer.Exit(code=2) from exc
         status = response.status_code
         if status == 200:
             handle_success(response)
@@ -473,11 +482,15 @@ def release(
         raise typer.Exit(code=2)
 
     client = build_client(state.base_url)
-    response = client.get_httpx_client().request(
-        "post",
-        f"/v1/claims/{claim_id}/release",
-        headers={"authorization": f"Bearer {worker_api_key}"},
-    )
+    try:
+        response = client.get_httpx_client().request(
+            "post",
+            f"/v1/claims/{claim_id}/release",
+            headers={"authorization": f"Bearer {worker_api_key}"},
+        )
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
 
     if response.status_code != 200:
         console.print(f"[red]Release failed (status={response.status_code}).[/red]")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 import typer
 from rich.table import Table
 
@@ -41,7 +42,11 @@ def whoami(
 
     if worker_api_key:
         worker_client = build_client(state.base_url, api_key=worker_api_key)
-        response = get_worker_me(client=worker_client)
+        try:
+            response = get_worker_me(client=worker_client)
+        except httpx.HTTPError as exc:
+            console.print(f"[red]Network error: {exc}[/red]")
+            raise typer.Exit(code=2) from exc
         if response.status_code == 200 and response.parsed is not None:
             worker = response.parsed.worker
             payload["worker"] = worker.to_dict()
@@ -55,7 +60,11 @@ def whoami(
                 table.add_row("claimedByPosterId", str(worker.claimed_by_poster_id))
                 console.print(table)
 
-            metrics = get_worker_metrics(client=worker_client)
+            try:
+                metrics = get_worker_metrics(client=worker_client)
+            except httpx.HTTPError as exc:
+                console.print(f"[red]Network error: {exc}[/red]")
+                raise typer.Exit(code=2) from exc
             if metrics.status_code == 200 and metrics.parsed is not None:
                 payload["worker_metrics"] = metrics.parsed.to_dict()
                 if not json_output:
@@ -67,7 +76,11 @@ def whoami(
 
     if poster_api_key:
         poster_client = build_client(state.base_url, api_key=poster_api_key)
-        metrics = get_poster_metrics(client=poster_client)
+        try:
+            metrics = get_poster_metrics(client=poster_client)
+        except httpx.HTTPError as exc:
+            console.print(f"[red]Network error: {exc}[/red]")
+            raise typer.Exit(code=2) from exc
         if metrics.status_code == 200 and metrics.parsed is not None:
             payload["poster_metrics"] = metrics.parsed.to_dict()
             if not json_output:

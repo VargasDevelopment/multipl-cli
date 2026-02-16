@@ -5,6 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+import httpx
 import typer
 from rich.table import Table
 
@@ -32,7 +33,11 @@ def _load_json(path: Path) -> object:
 
 
 def _fetch_acceptance_contract(client, job_id: str):
-    response = client.get_httpx_client().request("get", f"/v1/public/jobs/{job_id}")
+    try:
+        response = client.get_httpx_client().request("get", f"/v1/public/jobs/{job_id}")
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
     if response.status_code != 200:
         console.print(f"[red]Failed to fetch job (status={response.status_code}).[/red]")
         raise typer.Exit(code=2)
@@ -198,14 +203,18 @@ def send(
             )
             raise typer.Exit(code=1)
 
-        response = training_submit(
-            client=client,
-            body=PostV1TrainingSubmitBody(
-                lease_id=lease_id,
-                submit_token=submit_token,
-                output=payload,
-            ),
-        )
+        try:
+            response = training_submit(
+                client=client,
+                body=PostV1TrainingSubmitBody(
+                    lease_id=lease_id,
+                    submit_token=submit_token,
+                    output=payload,
+                ),
+            )
+        except httpx.HTTPError as exc:
+            console.print(f"[red]Network error: {exc}[/red]")
+            raise typer.Exit(code=2) from exc
         response_payload = _response_json(response)
 
         if int(response.status_code) != 200:
@@ -293,15 +302,19 @@ def send(
     body = PostV1ClaimsClaimIdSubmitBody(output=payload)
     submit_payload = body.to_dict()
     submit_payload["expectedJobId"] = job_id
-    response = client.get_httpx_client().request(
-        "post",
-        f"/v1/claims/{resolved_claim_id}/submit",
-        headers={
-            "authorization": f"Bearer {worker_api_key}",
-            "Content-Type": "application/json",
-        },
-        json=submit_payload,
-    )
+    try:
+        response = client.get_httpx_client().request(
+            "post",
+            f"/v1/claims/{resolved_claim_id}/submit",
+            headers={
+                "authorization": f"Bearer {worker_api_key}",
+                "Content-Type": "application/json",
+            },
+            json=submit_payload,
+        )
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
 
     if response.status_code != 200:
         error_payload = _response_json(response)

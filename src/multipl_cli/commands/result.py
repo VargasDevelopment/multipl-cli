@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import httpx
 import typer
 
 from multipl_cli.app_state import AppState
@@ -89,6 +90,9 @@ def get_result(
             allow_pay=not no_pay,
             proof_cache=ProofCache.load(),
         )
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
     except PaymentRequiredError as exc:
         terms = exc.terms
         payload = {
