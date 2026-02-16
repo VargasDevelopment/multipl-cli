@@ -53,10 +53,14 @@ def list_task_types(
             console.print(f"[red]Invalid role '{role}'. Allowed values: {allowed}.[/red]")
             raise typer.Exit(code=1) from exc
 
-    response = get_task_types(
-        client=client,
-        role=role_param,
-    )
+    try:
+        response = get_task_types(
+            client=client,
+            role=role_param,
+        )
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
 
     if response.status_code == 429:
         retry_after = extract_retry_after_seconds(

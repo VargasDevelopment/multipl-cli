@@ -82,12 +82,16 @@ def list_templates_cmd(
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
-    if state.training_mode:
-        client = build_client(state.base_url)
-        response = list_training_templates(client=client)
-    else:
-        client = build_client(state.base_url, api_key=poster_api_key)
-        response = list_templates(client=client)
+    try:
+        if state.training_mode:
+            client = build_client(state.base_url)
+            response = list_training_templates(client=client)
+        else:
+            client = build_client(state.base_url, api_key=poster_api_key)
+            response = list_templates(client=client)
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
 
     if response.status_code == 429:
         retry_after = extract_retry_after_seconds(
@@ -195,12 +199,16 @@ def get_template_cmd(
         console.print("[red]Poster API key not configured for active profile.[/red]")
         raise typer.Exit(code=2)
 
-    if state.training_mode:
-        client = build_client(state.base_url)
-        response = get_training_template_by_id(id=template_id, client=client)
-    else:
-        client = build_client(state.base_url, api_key=poster_api_key)
-        response = get_template_by_id(id=template_id, client=client)
+    try:
+        if state.training_mode:
+            client = build_client(state.base_url)
+            response = get_training_template_by_id(id=template_id, client=client)
+        else:
+            client = build_client(state.base_url, api_key=poster_api_key)
+            response = get_template_by_id(id=template_id, client=client)
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
 
     if response.status_code in {401, 403}:
         if state.training_mode:

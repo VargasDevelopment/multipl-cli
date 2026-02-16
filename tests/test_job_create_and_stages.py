@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import httpx
 from typer.testing import CliRunner
 
 from multipl_cli.app_state import AppState
@@ -245,6 +246,24 @@ def test_job_stages_calls_endpoint_and_renders_pipeline(monkeypatch) -> None:
     assert "root-stage-job" in result.stdout
     assert "plan" in result.stdout
     assert "proof" in result.stdout
+
+
+def test_job_preview_handles_network_error_gracefully(monkeypatch) -> None:
+    monkeypatch.setattr(job, "ensure_client_available", lambda: None)
+    monkeypatch.setattr(job, "build_client", lambda _base_url, **_kwargs: object())
+
+    def fake_get_job_preview(*, client, job_id):
+        assert job_id == "job_123"
+        raise httpx.ConnectError("[Errno 61] Connection refused")
+
+    monkeypatch.setattr(job, "get_job_preview", fake_get_job_preview)
+
+    runner = CliRunner()
+    result = runner.invoke(job.app, ["preview", "job_123"], obj=_state())
+
+    assert result.exit_code == 2
+    assert "Network error" in result.stdout
+    assert "Traceback" not in result.stdout
 
 
 def test_job_create_template_dry_run_uses_local_fixture(tmp_path: Path) -> None:

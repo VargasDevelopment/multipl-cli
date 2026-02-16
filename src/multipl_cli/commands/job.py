@@ -531,15 +531,19 @@ def _fetch_template_from_api(
     training_mode: bool,
     poster_api_key: str | None,
 ) -> Any:
-    if training_mode:
-        client = build_client(base_url)
-        response = get_training_template_by_id(id=template_id, client=client)
-    else:
-        if not poster_api_key:
-            console.print("[red]Poster API key not configured for active profile.[/red]")
-            raise typer.Exit(code=2)
-        client = build_client(base_url, api_key=poster_api_key)
-        response = get_template_by_id(id=template_id, client=client)
+    try:
+        if training_mode:
+            client = build_client(base_url)
+            response = get_training_template_by_id(id=template_id, client=client)
+        else:
+            if not poster_api_key:
+                console.print("[red]Poster API key not configured for active profile.[/red]")
+                raise typer.Exit(code=2)
+            client = build_client(base_url, api_key=poster_api_key)
+            response = get_template_by_id(id=template_id, client=client)
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
 
     if response.status_code == 200 and response.parsed is not None:
         return response.parsed
@@ -596,11 +600,15 @@ def _review_job(
         decision=decision,
         reason=note if note else UNSET,
     )
-    response = post_job_review(
-        client=client,
-        job_id=job_id,
-        body=body,
-    )
+    try:
+        response = post_job_review(
+            client=client,
+            job_id=job_id,
+            body=body,
+        )
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
 
     if response.status_code == 200:
         payload = response.parsed.to_dict() if response.parsed is not None else (_parse_response_json(response) or {})
@@ -689,23 +697,27 @@ def list_jobs(
             console.print(f"[red]Invalid lane '{lane}'. Allowed values: {allowed}.[/red]")
             raise typer.Exit(code=1) from exc
 
-    if lane_enum is not None:
-        if task_type or status:
-            console.print(
-                "[yellow]--task-type/--status are ignored when --lane is provided.[/yellow]"
+    try:
+        if lane_enum is not None:
+            if task_type or status:
+                console.print(
+                    "[yellow]--task-type/--status are ignored when --lane is provided.[/yellow]"
+                )
+            response = list_lane_jobs(
+                client=client,
+                lane=lane_enum,
+                limit=limit,
             )
-        response = list_lane_jobs(
-            client=client,
-            lane=lane_enum,
-            limit=limit,
-        )
-    else:
-        response = list_public_jobs(
-            client=client,
-            state=status or UNSET,
-            task_type=task_type or UNSET,
-            limit=limit,
-        )
+        else:
+            response = list_public_jobs(
+                client=client,
+                state=status or UNSET,
+                task_type=task_type or UNSET,
+                limit=limit,
+            )
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
 
     if response.status_code == 429:
         retry_after = extract_retry_after_seconds(
@@ -799,7 +811,11 @@ def get_job_cmd(
 
     if not public and poster_api_key:
         client = build_client(state.base_url, api_key=poster_api_key)
-        response = get_job(client=client, job_id=job_id)
+        try:
+            response = get_job(client=client, job_id=job_id)
+        except httpx.HTTPError as exc:
+            console.print(f"[red]Network error: {exc}[/red]")
+            raise typer.Exit(code=2) from exc
         if response.status_code == 200 and response.parsed is not None:
             console.print(response.parsed.to_dict() if json_output else response.parsed.to_dict())
             return
@@ -808,7 +824,11 @@ def get_job_cmd(
             raise typer.Exit(code=2)
 
     client = build_client(state.base_url)
-    response = get_public_job(client=client, job_id=job_id)
+    try:
+        response = get_public_job(client=client, job_id=job_id)
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
     if response.status_code != 200 or response.parsed is None:
         console.print(f"[red]Failed to fetch public job (status={response.status_code}).[/red]")
         raise typer.Exit(code=2)
@@ -842,7 +862,11 @@ def preview_job(
         raise typer.Exit(code=2)
 
     client = build_client(state.base_url, api_key=poster_api_key)
-    response = get_job_preview(client=client, job_id=job_id)
+    try:
+        response = get_job_preview(client=client, job_id=job_id)
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
 
     if response.status_code == 200:
         if response.parsed is not None:
@@ -956,7 +980,11 @@ def get_job_stages_cmd(
         raise typer.Exit(code=2)
 
     client = build_client(state.base_url, api_key=poster_api_key)
-    response = get_job_stages(client=client, job_id=job_id)
+    try:
+        response = get_job_stages(client=client, job_id=job_id)
+    except httpx.HTTPError as exc:
+        console.print(f"[red]Network error: {exc}[/red]")
+        raise typer.Exit(code=2) from exc
 
     if response.status_code == 200:
         payload = response.parsed.to_dict() if response.parsed is not None else (_parse_response_json(response) or {})
@@ -1253,10 +1281,14 @@ def create_job(
 
     if state.training_mode:
         client = build_client(state.base_url)
-        response = training_validate_job(
-            client=client,
-            body=PostV1TrainingValidateJobBody.from_dict(request_payload),
-        )
+        try:
+            response = training_validate_job(
+                client=client,
+                body=PostV1TrainingValidateJobBody.from_dict(request_payload),
+            )
+        except httpx.HTTPError as exc:
+            console.print(f"[red]Network error: {exc}[/red]")
+            raise typer.Exit(code=2) from exc
         if int(response.status_code) != 200:
             console.print(
                 f"[red]Training validation failed (status={response.status_code}).[/red]"
@@ -1367,6 +1399,9 @@ def create_job(
         except PaymentFlowError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(code=3) from exc
+        except httpx.HTTPError as exc:
+            console.print(f"[red]Network error: {exc}[/red]")
+            raise typer.Exit(code=2) from exc
 
         if response.status_code == 201:
             payload = response.json()
