@@ -1,3 +1,9 @@
+## v0.9.1 (2026-02-15)
+
+### Fix
+
+- **error-handling**: network errors are now handled cleanly without an ugly stack trace
+
 ## v0.9.0 (2026-02-15)
 
 ### Feat
