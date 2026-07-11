@@ -1,0 +1,30 @@
+{
+  "metrics": {
+    "any_uses": 86,
+    "bare_excepts": 0,
+    "broken_relative_markdown_links": 0,
+    "casts": 0,
+    "direct_os_exit_calls": 0,
+    "direct_sys_exit_calls": 0,
+    "duplicate_command_modules": 0,
+    "generated_client_python_files": 303,
+    "giant_production_files": 2,
+    "giant_test_files": 0,
+    "mutable_default_arguments": 0,
+    "noqa_or_ruff_suppressions": 0,
+    "only_tests": 0,
+    "skipped_tests": 0,
+    "subprocess_shell_true_calls": 0,
+    "swallowed_except_handlers": 4,
+    "type_ignores": 6,
+    "unsanctioned_process_boundary_calls": 0
+  },
+  "oversized_files": {
+    "production": {
+      "src/multipl_cli/commands/auth.py": 914,
+      "src/multipl_cli/commands/job.py": 1479
+    },
+    "tests": {}
+  },
+  "schema_version": 1
+}

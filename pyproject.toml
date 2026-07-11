@@ -44,6 +44,9 @@ dev = [
 [project.scripts]
 multipl = "multipl_cli.main:app"
 
+[tool.hatch.envs.default.scripts]
+health = "python3 scripts/code_health.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/multipl_cli"]
 
@@ -61,3 +64,12 @@ version_files = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.code_health]
+baseline = "code_health/baseline.json"
+production_roots = ["src", "scripts"]
+test_root = "tests"
+generated_client = "src/multipl_cli/_client"
+production_line_limit = 700
+test_line_limit = 1000
+sanctioned_cli_boundaries = ["src/multipl_cli/main.py"]
