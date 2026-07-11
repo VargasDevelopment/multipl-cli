@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import stat
 from pathlib import Path
@@ -36,13 +37,24 @@ def _text(value: object, label: str) -> str:
 
 def _secure_config_file(path: Path) -> None:
     try:
-        mode = stat.S_IMODE(path.stat().st_mode)
+        metadata = path.stat()
     except FileNotFoundError as exc:
         raise DispatchConfigError(f"Private dispatcher config does not exist: {path}") from exc
     if not path.is_file():
         raise DispatchConfigError("Private dispatcher config must be a regular file")
+    if metadata.st_uid != os.geteuid():
+        raise DispatchConfigError("Private dispatcher config must be owned by the current user")
+    mode = stat.S_IMODE(metadata.st_mode)
     if mode != 0o600:
         raise DispatchConfigError("Private dispatcher config permissions must be 0600")
+
+
+def _is_under(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
 
 
 def _identity(key: str) -> TaskIdentity:
@@ -62,7 +74,7 @@ def _task_policy(key: str, value: object) -> TaskPolicy:
     data = _object(value, f"worktrees.{key}")
     if set(data) != _TASK_FIELDS:
         raise DispatchConfigError(f"worktrees.{key} must contain exactly cwd, model, and reasoning")
-    cwd = Path(_text(data["cwd"], f"worktrees.{key}.cwd"))
+    cwd = Path(_text(data["cwd"], f"worktrees.{key}.cwd")).expanduser().resolve()
     if not cwd.is_absolute() or not cwd.is_dir():
         raise DispatchConfigError(f"worktrees.{key}.cwd must be an existing absolute directory")
     reasoning = _text(data["reasoning"], f"worktrees.{key}.reasoning")
@@ -102,12 +114,20 @@ def load_dispatch_config(path: Path) -> DispatchConfig:
     heartbeat = data["heartbeatSeconds"]
     if isinstance(heartbeat, bool) or not isinstance(heartbeat, (int, float)) or heartbeat <= 0:
         raise DispatchConfigError("heartbeatSeconds must be positive")
+    state_dir = (resolved.parent / "dispatch-state").resolve()
+    protected_paths = (resolved, state_dir)
+    for task in tasks:
+        for protected in protected_paths:
+            if _is_under(protected, task.cwd):
+                raise DispatchConfigError(
+                    "Private dispatcher config and state must be outside every allowed task cwd"
+                )
     return DispatchConfig(
         base_url=base_url,
         bearer=_text(data["bearer"], "bearer"),
         namespace=_text(scope_headers["x-multipl-namespace"], "x-multipl-namespace"),
         lane=_text(scope_headers["x-multipl-lane"], "x-multipl-lane"),
         tasks=tasks,
-        state_dir=resolved.parent / "dispatch-state",
+        state_dir=state_dir,
         heartbeat_seconds=float(heartbeat),
     )

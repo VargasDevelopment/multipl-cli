@@ -2,12 +2,17 @@
 
 `multipl private dispatch-once` is a domain-neutral, single-shot scheduler for the Multipl private
 work API. It does not use the generated public client and does not contain producer-specific task
-logic.
+logic. It installs or activates no timer, systemd unit, or cron job.
 
-## Configuration
+## Dependencies And Configuration
 
-Pass an explicit JSON configuration path. The file contains a bearer credential and must be owned
-with mode `0600`. No environment-variable or task-type fallback is supported.
+The dispatcher requires Linux namespaces, `/usr/bin/bwrap` (Bubblewrap), and an installed `codex`
+executable. Bubblewrap must be able to create a mount and PID namespace. The command fails closed
+if any of those prerequisites or sandbox mounts cannot be established.
+
+Pass an explicit JSON configuration path. The file contains a bearer credential, must be a regular
+file owned by the current effective user, and must have mode `0600`. No environment-variable or
+task-type fallback is supported.
 
 ```json
 {
@@ -33,52 +38,97 @@ the complete launch policy for that identity: an existing absolute working direc
 reasoning effort. The scheduler sends exactly those identities in `taskAllowlist`; it never falls
 back from an unknown identity to a task type or default worktree.
 
+The resolved config file and derived `dispatch-state` directory must be outside every allowed task
+cwd. This check also follows symlinks. Keep the config and state in a separate operator-controlled
+directory so a worktree mount cannot expose the bearer, journal, or scope headers.
+
 Run one scheduling pass with:
 
 ```bash
 multipl private dispatch-once --config /etc/multipl/private-dispatch.json
 ```
 
-This command installs or activates no timer. An operator may call it from an external scheduler,
-but overlapping calls are harmless: a process-wide, nonblocking `fcntl.flock` makes the second
-call exit successfully without acquiring work.
+Overlapping calls are harmless: a process-wide, nonblocking `fcntl.flock` makes the second call
+exit successfully without acquiring work.
 
-## One-shot behavior
+## Durable State And Remote Operations
 
-Every invocation performs these steps in order:
+Every remote ownership transition is write-ahead journaled with atomic temp-file write, file fsync,
+rename, and parent-directory fsync. State directories are `0700`; journal, exchange, process,
+schema, output, lock, and temporary files are `0600`.
+
+The pass proceeds in this order:
 
 1. Acquire the local process lock.
-2. Flush or reconcile the durable journal. A pending result that still cannot be submitted causes
-   an error exit before any acquire request.
+2. Replay a pending terminal outcome, result, acquire, or renew operation. A failed replay blocks
+   the pass before any new acquire.
 3. Read the private task registry and require every configured exact identity to exist.
-4. Make one `acquire-next` request. A `204`, empty body, or `{ "attempt": null }` exits successfully
-   before prompt construction or agent launch.
-5. Persist `claimed`, read and verify the exact work, then persist `launched` before attempting
-   `Popen`. At most one Codex process is attempted.
-6. Renew the lease at `heartbeatSeconds` intervals. Lease renewal failure terminates the new child
-   process group and records a dispatcher failure result.
-7. Persist `result_pending` before result submission. Submission failure leaves the operation in
-   the journal for the next invocation, using the same idempotency key.
+4. Write `acquire_intent` with the exact allowlist and an idempotency key, then make exactly one
+   `POST /private/v1/attempts/acquire-next`. The response is persisted as `acquire_response`
+   before `claimed` or an empty-queue transition.
+5. Read and verify the exact work, then persist `launched` before attempting Codex. At most one
+   Codex process is attempted.
+6. Before each renew, persist `renew_intent` with the exact current lease and stable key. An
+   ambiguous response or restart replays that same request; the returned generation is journaled
+   before any later state.
+7. Persist the terminal operation before sending it. Successful agent output is submitted as a
+   result; failures and unknowns use the terminal outcome endpoint below.
 
-The `claimed`, `launched`, and `result_pending` states use atomic temp-file write, file fsync,
-rename, and parent-directory fsync. State directories are `0700`; journal, schema, output, lock,
-and temporary files are `0600`. A restart after `launched` records an unknown/failure result and
-never launches that attempt again. The private result contract still applies: if a task result
-schema does not admit the dispatcher failure envelope, the rejected submission remains durably
-pending and blocks new acquisition for operator reconciliation.
+Lease expiry timestamps are parsed as authoritative UTC times. The first and later renewals use a
+safety margin based on remaining authority; `heartbeatSeconds` is only a maximum cadence. The
+renew HTTP timeout is no longer than the remaining lease. The dispatcher does not launch when the
+lease is expired or too close to expiry.
 
-## Codex boundary
+## Terminal Outcomes
 
-The exact process form is:
+Failures never use a producer result envelope. The scheduler sends:
 
 ```text
-codex exec --ephemeral --ignore-user-config --sandbox workspace-write -C <exact-cwd> \
-  --output-schema <private-state-file> --output-last-message <private-state-file> \
-  --model <exact-model> --config model_reasoning_effort="<exact-reasoning>" -
+PUT /private/v1/work/<workId>/attempts/<attemptId>/outcome
+Idempotency-Key: <stable-key>
 ```
 
-The deterministic prompt is passed on stdin and contains only the exact task identity and canonical
-JSON work input. The output schema is the matching private registry result schema. The child gets
-an explicit allowlist of platform, proxy, TLS, Codex-home, and OpenAI authentication variables;
-all `MULTIPL_*` variables and unrelated environment values are removed. Bearers, scope headers,
-private config paths, prompts, and child output are never logged.
+```json
+{
+  "lease": {"leaseId": "...", "generation": 3},
+  "outcome": "failed",
+  "code": "invalid_agent_output"
+}
+```
+
+`outcome` is `failed` for invalid output, nonzero exit, lease loss, isolation failure, and other
+bounded dispatcher failures. `outcome` is `unknown` when the scheduler cannot know what happened,
+including restart after launch. Terminal records are retried before any acquire and are never
+converted into runnable producer results. A rejected or unavailable terminal submission remains
+spooled and blocks new work.
+
+Successful output alone uses:
+
+```text
+PUT /private/v1/work/<workId>/result
+```
+
+with the producer payload and the current lease.
+
+## Codex Isolation And Process Lifetime
+
+Codex runs under Bubblewrap with `--die-with-parent`, a new PID namespace, a private `/proc`, a
+private `/tmp`, and the host network namespace retained for Codex itself. The inner Codex command
+still uses `--sandbox workspace-write`.
+
+The namespace exposes only:
+
+- the exact configured worktree at `/workspace`, read-write;
+- required system runtime paths and selected DNS/TLS files, read-only;
+- `/codex-home/auth.json`, read-only, when present;
+- a per-attempt `/exchange` containing only the output schema and output-last-message file.
+
+The dispatcher config, bearer, scope headers, state parent, unrelated home files, and host `/proc`
+are not mounted or passed through. The child receives an explicit environment allowlist for Codex,
+OpenAI authentication, proxies, TLS, locale, and networking; `MULTIPL_*` and unrelated variables
+are removed. The prompt contains only the exact task identity and canonical work input.
+
+The wrapper PID, process-group ID, `/proc` start time, and command hash are durably recorded around
+launch. Startup reconciliation and terminal-unknown handling terminate a matching process group
+with PID-reuse guards. Normal exceptions and SIGTERM run cleanup in `finally`; SIGKILL containment
+relies on Bubblewrap's kernel parent-death setting.

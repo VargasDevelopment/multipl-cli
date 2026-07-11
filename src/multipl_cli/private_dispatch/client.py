@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 
 from multipl_cli.private_dispatch.types import (
+    TERMINAL_CODES,
     Attempt,
     DispatchConfig,
     Lease,
@@ -13,9 +14,20 @@ from multipl_cli.private_dispatch.types import (
 
 
 class PrivateApiError(RuntimeError):
-    def __init__(self, operation: str, status_code: int | None = None) -> None:
+    def __init__(
+        self,
+        operation: str,
+        status_code: int | None = None,
+        *,
+        ambiguous: bool | None = None,
+    ) -> None:
         self.operation = operation
         self.status_code = status_code
+        self.ambiguous = (
+            status_code is None or status_code >= 500 or status_code in {408, 425, 429}
+            if ambiguous is None
+            else ambiguous
+        )
         detail = f"status {status_code}" if status_code is not None else "network failure"
         super().__init__(f"Private API {operation} failed ({detail})")
 
@@ -78,14 +90,19 @@ class PrivateClient:
         *,
         payload: object | None = None,
         idempotency_key: str | None = None,
+        timeout: float | None = None,
     ) -> httpx.Response:
         headers = {"Idempotency-Key": idempotency_key} if idempotency_key else None
+        request_options: dict[str, object] = {"json": payload, "headers": headers}
+        if timeout is not None:
+            request_options["timeout"] = timeout
         try:
-            response = self._client.request(method, path, json=payload, headers=headers)
+            response = self._client.request(method, path, **request_options)
         except httpx.HTTPError as exc:
-            raise PrivateApiError(operation) from exc
+            raise PrivateApiError(operation, ambiguous=True) from exc
         if response.status_code < 200 or response.status_code >= 300:
-            raise PrivateApiError(operation, response.status_code)
+            ambiguous = response.status_code >= 500 or response.status_code in {408, 425, 429}
+            raise PrivateApiError(operation, response.status_code, ambiguous=ambiguous)
         return response
 
     def task_contracts(self) -> tuple[TaskContract, ...]:
@@ -121,21 +138,24 @@ class PrivateClient:
         )
         if response.status_code == 204 or not response.content:
             return None
-        body = _mapping(response.json(), "acquire response")
-        raw_attempt = body.get("attempt")
-        if raw_attempt is None:
-            return None
-        attempt = _mapping(raw_attempt, "attempt")
-        lease = _mapping(attempt.get("lease"), "lease")
-        return Attempt(
-            attempt_id=_string(attempt, "id", "attempt"),
-            work_id=_string(attempt, "workId", "attempt"),
-            lease=Lease(
-                lease_id=_string(lease, "leaseId", "lease"),
-                generation=_positive_int(lease, "generation", "lease"),
-                expires_at=_string(lease, "expiresAt", "lease"),
-            ),
-        )
+        try:
+            body = _mapping(response.json(), "acquire response")
+            raw_attempt = body.get("attempt")
+            if raw_attempt is None:
+                return None
+            attempt = _mapping(raw_attempt, "attempt")
+            lease = _mapping(attempt.get("lease"), "lease")
+            return Attempt(
+                attempt_id=_string(attempt, "id", "attempt"),
+                work_id=_string(attempt, "workId", "attempt"),
+                lease=Lease(
+                    lease_id=_string(lease, "leaseId", "lease"),
+                    generation=_positive_int(lease, "generation", "lease"),
+                    expires_at=_string(lease, "expiresAt", "lease"),
+                ),
+            )
+        except (PrivateApiError, ValueError, TypeError) as exc:
+            raise PrivateApiError("parse acquire response", ambiguous=True) from exc
 
     def work(self, work_id: str) -> Work:
         response = self._request("GET", f"/private/v1/work/{work_id}", "read work")
@@ -147,7 +167,7 @@ class PrivateClient:
             input=raw_input,
         )
 
-    def renew(self, attempt: Attempt, key: str) -> Attempt:
+    def renew(self, attempt: Attempt, key: str, *, timeout: float | None = None) -> Attempt:
         path = f"/private/v1/work/{attempt.work_id}/attempts/{attempt.attempt_id}/renew"
         response = self._request(
             "POST",
@@ -155,19 +175,23 @@ class PrivateClient:
             "renew",
             payload={"lease": attempt.lease.request()},
             idempotency_key=key,
+            timeout=timeout,
         )
-        body = _mapping(response.json(), "renew response")
-        raw = _mapping(body.get("attempt"), "renewed attempt")
-        lease = _mapping(raw.get("lease"), "renewed lease")
-        return Attempt(
-            attempt_id=_string(raw, "id", "renewed attempt"),
-            work_id=_string(raw, "workId", "renewed attempt"),
-            lease=Lease(
-                lease_id=_string(lease, "leaseId", "renewed lease"),
-                generation=_positive_int(lease, "generation", "renewed lease"),
-                expires_at=_string(lease, "expiresAt", "renewed lease"),
-            ),
-        )
+        try:
+            body = _mapping(response.json(), "renew response")
+            raw = _mapping(body.get("attempt"), "renewed attempt")
+            lease = _mapping(raw.get("lease"), "renewed lease")
+            return Attempt(
+                attempt_id=_string(raw, "id", "renewed attempt"),
+                work_id=_string(raw, "workId", "renewed attempt"),
+                lease=Lease(
+                    lease_id=_string(lease, "leaseId", "renewed lease"),
+                    generation=_positive_int(lease, "generation", "renewed lease"),
+                    expires_at=_string(lease, "expiresAt", "renewed lease"),
+                ),
+            )
+        except (PrivateApiError, ValueError, TypeError) as exc:
+            raise PrivateApiError("parse renew response", ambiguous=True) from exc
 
     def submit(self, attempt: Attempt, payload: object, key: str) -> None:
         self._request(
@@ -178,6 +202,23 @@ class PrivateClient:
                 "attemptId": attempt.attempt_id,
                 "lease": attempt.lease.request(),
                 "payload": payload,
+            },
+            idempotency_key=key,
+        )
+
+    def outcome(self, attempt: Attempt, outcome: str, code: str, key: str) -> None:
+        if outcome not in {"failed", "unknown"}:
+            raise ValueError("Terminal outcome must be failed or unknown")
+        if code not in TERMINAL_CODES:
+            raise ValueError("Terminal outcome code is not allowlisted")
+        self._request(
+            "PUT",
+            f"/private/v1/work/{attempt.work_id}/attempts/{attempt.attempt_id}/outcome",
+            "submit outcome",
+            payload={
+                "lease": attempt.lease.request(),
+                "outcome": outcome,
+                "code": code,
             },
             idempotency_key=key,
         )

@@ -2,11 +2,25 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import stat
+import subprocess
+import sys
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from multipl_cli.private_dispatch.agent import AgentOutcome, AgentRunner, child_environment
+import pytest
+
+from multipl_cli.private_dispatch.agent import (
+    AgentOutcome,
+    AgentRunner,
+    RenewalUnresolved,
+    child_environment,
+    process_identity,
+)
 from multipl_cli.private_dispatch.client import PrivateApiError
+from multipl_cli.private_dispatch.lease import LeaseExpired
 from multipl_cli.private_dispatch.scheduler import Dispatcher
 from multipl_cli.private_dispatch.storage import Journal, acquire_lock
 from multipl_cli.private_dispatch.types import (
@@ -30,38 +44,53 @@ SCHEMA = {
 
 
 def _config(tmp_path: Path, heartbeat: float = 1) -> DispatchConfig:
+    worktree = tmp_path / "worktree"
+    worktree.mkdir(parents=True, exist_ok=True)
     return DispatchConfig(
         base_url="https://private.multipl.test",
         bearer="secret-bearer",
         namespace="tenant-a",
         lane="agents",
-        tasks=(TaskPolicy(IDENTITY, "gpt-5.6-codex", "high", tmp_path),),
+        tasks=(TaskPolicy(IDENTITY, "gpt-5.6-codex", "high", worktree),),
         state_dir=tmp_path / "state",
         heartbeat_seconds=heartbeat,
     )
 
 
-def _attempt(generation: int = 1) -> Attempt:
+def _attempt(generation: int = 1, expires_at: str = "2030-01-01T00:00:00Z") -> Attempt:
     return Attempt(
         "attempt-1",
         "work-1",
-        Lease("00000000-0000-4000-8000-000000000001", generation, "2030-01-01T00:00:00Z"),
+        Lease("00000000-0000-4000-8000-000000000001", generation, expires_at),
     )
 
 
 class FakeClient:
-    def __init__(self, attempt: Attempt | None = None, submit_failures: int = 0) -> None:
+    def __init__(
+        self,
+        attempt: Attempt | None = None,
+        submit_failures: int = 0,
+        outcome_failures: int = 0,
+        acquire_error: PrivateApiError | None = None,
+        renew_errors: list[PrivateApiError] | None = None,
+    ) -> None:
         self.next_attempt = attempt
         self.submit_failures = submit_failures
+        self.outcome_failures = outcome_failures
+        self.acquire_error = acquire_error
+        self.renew_errors = list(renew_errors or [])
         self.acquires: list[tuple[tuple[TaskIdentity, ...], str]] = []
         self.submissions: list[tuple[Attempt, object, str]] = []
-        self.renews: list[str] = []
+        self.outcomes: list[tuple[Attempt, str, str, str]] = []
+        self.renews: list[tuple[Attempt, str, float | None]] = []
 
     def task_contracts(self) -> tuple[TaskContract, ...]:
         return (TaskContract(IDENTITY, SCHEMA),)
 
     def acquire(self, allowlist: tuple[TaskIdentity, ...], key: str) -> Attempt | None:
         self.acquires.append((allowlist, key))
+        if self.acquire_error is not None:
+            raise self.acquire_error
         value = self.next_attempt
         self.next_attempt = None
         return value
@@ -70,27 +99,51 @@ class FakeClient:
         assert work_id == "work-1"
         return Work(work_id, IDENTITY, {"document": "hello"})
 
-    def renew(self, attempt: Attempt, key: str) -> Attempt:
-        self.renews.append(key)
+    def renew(self, attempt: Attempt, key: str, *, timeout: float | None = None) -> Attempt:
+        self.renews.append((attempt, key, timeout))
+        if self.renew_errors:
+            raise self.renew_errors.pop(0)
         return _attempt(attempt.lease.generation + 1)
 
     def submit(self, attempt: Attempt, payload: object, key: str) -> None:
         self.submissions.append((attempt, payload, key))
         if self.submit_failures:
             self.submit_failures -= 1
-            raise PrivateApiError("submit result", 503)
+            raise PrivateApiError("submit result", 503, ambiguous=True)
+
+    def outcome(self, attempt: Attempt, outcome: str, code: str, key: str) -> None:
+        self.outcomes.append((attempt, outcome, code, key))
+        if self.outcome_failures:
+            self.outcome_failures -= 1
+            raise PrivateApiError("submit outcome", 503, ambiguous=True)
 
 
 class FakeRunner:
-    def __init__(self) -> None:
+    def __init__(self, result: str = "success", code: str = "invalid_agent_output", call_renew: bool = False) -> None:
         self.calls = 0
+        self.result = result
+        self.code = code
+        self.call_renew = call_renew
 
     def run(self, attempt, work, policy, result_schema, renew) -> AgentOutcome:
         self.calls += 1
         assert work.task == IDENTITY
         assert policy.cwd.is_absolute()
         assert result_schema == SCHEMA
-        return AgentOutcome(attempt, {"result": "done"}, "success")
+        current = attempt
+        if self.call_renew:
+            try:
+                current = renew(current)
+            except RenewalUnresolved:
+                return AgentOutcome(current, None, "failed", "renew_ambiguous", True)
+            except LeaseExpired:
+                return AgentOutcome(current, None, "failed", "lease_expired")
+            except PrivateApiError:
+                return AgentOutcome(current, None, "failed", "lease_lost")
+        if self.result == "success":
+            return AgentOutcome(current, {"result": "done"}, "success")
+        outcome = "unknown" if self.result == "unknown" else "failed"
+        return AgentOutcome(current, None, outcome, self.code)
 
 
 def test_empty_queue_exits_before_prompt_or_launch(tmp_path: Path) -> None:
@@ -103,6 +156,8 @@ def test_empty_queue_exits_before_prompt_or_launch(tmp_path: Path) -> None:
     assert client.acquires[0][0] == (IDENTITY,)
     assert runner.calls == 0
     assert client.submissions == []
+    assert client.outcomes == []
+    assert not Journal(_config(tmp_path).state_dir).path.exists()
 
 
 def test_process_lock_overlap_is_success_and_does_not_acquire(tmp_path: Path) -> None:
@@ -135,7 +190,54 @@ def test_one_acquire_one_launch_and_successful_result(tmp_path: Path) -> None:
     assert runner.calls == 1
     assert len(client.submissions) == 1
     assert client.submissions[0][1] == {"result": "done"}
+    assert client.outcomes == []
     assert not Journal(_config(tmp_path).state_dir).path.exists()
+
+
+def test_acquire_intent_replays_exact_allowlist_and_key_after_ambiguous_failure(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    first_client = FakeClient(acquire_error=PrivateApiError("acquire", 503, ambiguous=True))
+    first = Dispatcher(config, first_client, FakeRunner()).dispatch_once()
+    assert first.code == 2
+    intent = Journal(config.state_dir).load()
+    assert intent is not None
+    assert intent["state"] == "acquire_intent"
+    assert intent["allowlist"] == [IDENTITY.to_api()]
+    key = intent["idempotencyKey"]
+
+    second_client = FakeClient(_attempt())
+    second = Dispatcher(config, second_client, FakeRunner()).dispatch_once()
+    assert second.code == 0
+    assert second_client.acquires == [((IDENTITY,), key)]
+    assert len(second_client.submissions) == 1
+
+
+def test_acquire_response_is_replayed_without_a_second_acquire(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    attempt = _attempt()
+    Journal(config.state_dir).write(
+        {
+            "state": "acquire_response",
+            "allowlist": [IDENTITY.to_api()],
+            "idempotencyKey": "stable-acquire-key",
+            "attempt": {
+                "attemptId": attempt.attempt_id,
+                "workId": attempt.work_id,
+                "lease": {
+                    "leaseId": attempt.lease.lease_id,
+                    "generation": 1,
+                    "expiresAt": attempt.lease.expires_at,
+                },
+            },
+        }
+    )
+    client = FakeClient()
+    result = Dispatcher(config, client, FakeRunner()).dispatch_once()
+    assert result.code == 0
+    assert client.acquires == []
+    assert client.submissions[0][1] == {"result": "done"}
 
 
 def test_submit_failure_retries_without_relaunch_before_next_acquire(tmp_path: Path) -> None:
@@ -157,7 +259,96 @@ def test_submit_failure_retries_without_relaunch_before_next_acquire(tmp_path: P
     assert len(second_client.acquires) == 1
 
 
-def test_restart_after_launch_submits_unknown_and_never_relaunches(tmp_path: Path) -> None:
+def test_failure_uses_terminal_endpoint_not_producer_result(tmp_path: Path) -> None:
+    client = FakeClient(_attempt())
+    result = Dispatcher(
+        _config(tmp_path),
+        client,
+        FakeRunner(result="failed", code="invalid_agent_output"),
+    ).dispatch_once()
+    assert result.code == 2
+    assert client.submissions == []
+    assert client.outcomes[0][1:3] == ("failed", "invalid_agent_output")
+
+
+def test_terminal_outcome_spool_blocks_acquire_until_retried(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    first_client = FakeClient(_attempt(), outcome_failures=1)
+    first = Dispatcher(config, first_client, FakeRunner(result="failed")).dispatch_once()
+    assert first.code == 2
+    assert Journal(config.state_dir).load()["state"] == "outcome_pending"
+
+    second_client = FakeClient()
+    second = Dispatcher(config, second_client, FakeRunner()).dispatch_once()
+    assert second.code == 0
+    assert second_client.outcomes[0][3] == first_client.outcomes[0][3]
+    assert len(second_client.acquires) == 1
+
+
+def test_renewal_is_journaled_and_timeout_is_bounded_by_remaining_lease(tmp_path: Path) -> None:
+    expires = (datetime.now(timezone.utc) + timedelta(seconds=2)).isoformat()
+    client = FakeClient(_attempt(expires_at=expires))
+    result = Dispatcher(_config(tmp_path, heartbeat=30), client, FakeRunner(call_renew=True)).dispatch_once()
+    assert result.code == 0
+    assert len(client.renews) == 1
+    assert 0 < client.renews[0][2] <= 2
+    assert client.renews[0][0].lease.generation == 1
+    assert not Journal(_config(tmp_path).state_dir).path.exists()
+
+
+def test_ambiguous_renew_retries_exact_request_and_defers_terminal_state(tmp_path: Path) -> None:
+    error = PrivateApiError("renew", ambiguous=True)
+    config = _config(tmp_path)
+    first_client = FakeClient(_attempt(), renew_errors=[error, error])
+    first = Dispatcher(config, first_client, FakeRunner(call_renew=True)).dispatch_once()
+    assert first.code == 2
+    intent = Journal(config.state_dir).load()
+    assert intent["state"] == "renew_intent"
+    assert intent["terminal"] == {"outcome": "failed", "code": "renew_ambiguous"}
+    assert first_client.renews[0][0] == first_client.renews[1][0]
+    assert first_client.renews[0][1] == first_client.renews[1][1]
+
+    second_client = FakeClient()
+    second = Dispatcher(config, second_client, FakeRunner()).dispatch_once()
+    assert second.code == 0
+    assert second_client.renews[0][0].lease.generation == 1
+    assert second_client.renews[0][1] == first_client.renews[0][1]
+    assert second_client.outcomes[0][0].lease.generation == 2
+    assert second_client.outcomes[0][1:3] == ("failed", "renew_ambiguous")
+
+
+def test_restart_during_renew_replays_exact_lease_before_unknown_outcome(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    attempt = _attempt()
+    key = "stable-renew-key"
+    raw_attempt = {
+        "attemptId": attempt.attempt_id,
+        "workId": attempt.work_id,
+        "lease": {
+            "leaseId": attempt.lease.lease_id,
+            "generation": 1,
+            "expiresAt": attempt.lease.expires_at,
+        },
+    }
+    Journal(config.state_dir).write(
+        {
+            "state": "renew_intent",
+            "taskKey": IDENTITY.key,
+            "attempt": raw_attempt,
+            "renewIntent": {"attempt": raw_attempt, "idempotencyKey": key},
+            "process": None,
+        }
+    )
+    client = FakeClient()
+    result = Dispatcher(config, client, FakeRunner()).dispatch_once()
+    assert result.code == 0
+    assert client.renews[0][0] == attempt
+    assert client.renews[0][1] == key
+    assert client.outcomes[0][0].lease.generation == 2
+    assert client.outcomes[0][1:3] == ("unknown", "restart_after_launch")
+
+
+def test_restart_after_launch_submits_unknown_outcome_and_never_relaunches(tmp_path: Path) -> None:
     config = _config(tmp_path)
     journal = Journal(config.state_dir)
     journal.write(
@@ -180,16 +371,45 @@ def test_restart_after_launch_submits_unknown_and_never_relaunches(tmp_path: Pat
     result = Dispatcher(config, client, runner).dispatch_once()
     assert result.code == 0
     assert runner.calls == 0
-    assert client.submissions[0][1] == {
-        "dispatcher": {
-            "status": "failure",
-            "code": "restart_after_launch",
-            "retryAgent": False,
-        }
-    }
+    assert client.submissions == []
+    assert client.outcomes[0][1:3] == ("unknown", "restart_after_launch")
 
 
-def test_restart_after_claim_records_failure_without_launch(tmp_path: Path) -> None:
+def test_restart_after_launch_terminates_matching_recorded_process_group(tmp_path: Path) -> None:
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+    )
+    try:
+        identity = process_identity(process)
+        config = _config(tmp_path)
+        attempt = _attempt()
+        Journal(config.state_dir).write(
+            {
+                "state": "launched",
+                "attempt": {
+                    "attemptId": attempt.attempt_id,
+                    "workId": attempt.work_id,
+                    "lease": {
+                        "leaseId": attempt.lease.lease_id,
+                        "generation": 1,
+                        "expiresAt": attempt.lease.expires_at,
+                    },
+                },
+                "taskKey": IDENTITY.key,
+                "process": identity.to_journal(),
+            }
+        )
+        result = Dispatcher(config, FakeClient(), FakeRunner()).dispatch_once()
+        assert result.code == 0
+        assert process.poll() is not None
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+
+
+def test_restart_after_claim_submits_failed_outcome_without_launch(tmp_path: Path) -> None:
     config = _config(tmp_path)
     Journal(config.state_dir).write(
         {
@@ -210,13 +430,8 @@ def test_restart_after_claim_records_failure_without_launch(tmp_path: Path) -> N
     result = Dispatcher(config, client, runner).dispatch_once()
     assert result.code == 0
     assert runner.calls == 0
-    assert client.submissions[0][1] == {
-        "dispatcher": {
-            "status": "failure",
-            "code": "restart_after_claim",
-            "retryAgent": False,
-        }
-    }
+    assert client.submissions == []
+    assert client.outcomes[0][1:3] == ("failed", "restart_after_claim")
 
 
 def _fake_codex(tmp_path: Path, body: str) -> Path:
@@ -226,79 +441,89 @@ def _fake_codex(tmp_path: Path, body: str) -> Path:
     return executable
 
 
-def test_agent_exact_argv_env_stdin_schema_and_output(monkeypatch, tmp_path: Path) -> None:
-    _fake_codex(
-        tmp_path,
-        """import json, os, sys
+def test_agent_bwrap_isolates_config_home_and_proc_but_allows_exchange_and_worktree(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "private.json"
+    config_path.write_text('{"bearer":"real-bearer"}', encoding="utf-8")
+    home = tmp_path / "codex-home"
+    home.mkdir()
+    (home / "auth.json").write_text('{"token":"auth-token"}', encoding="utf-8")
+    unrelated = home / "unrelated.txt"
+    unrelated.write_text("home-secret", encoding="utf-8")
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    body = f"""import json, os, sys
+from pathlib import Path
 args = sys.argv[1:]
-output = args[args.index('--output-last-message') + 1]
-capture = {
+def read(path):
+    try:
+        return Path(path).read_text(encoding='utf-8')
+    except (OSError, UnicodeError):
+        return None
+schema = json.load(open(args[args.index('--output-schema') + 1]))
+capture = {{
     'args': args,
     'cwd': os.getcwd(),
     'env': dict(os.environ),
     'stdin': sys.stdin.read(),
-    'schema': json.load(open(args[args.index('--output-schema') + 1])),
-}
-json.dump(capture, open('capture.json', 'w'))
-json.dump({'result': 'done'}, open(output, 'w'))
-""",
-    )
-    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
-    monkeypatch.setenv("MULTIPL_BEARER", "must-not-leak")
-    monkeypatch.setenv("MULTIPL_PRIVATE_CONFIG", "/secret/config")
+    'schema': schema,
+    'config': read({str(config_path)!r}),
+    'state': read({str(tmp_path / 'state' / 'journal.json')!r}),
+    'unrelated': read({str(unrelated)!r}),
+    'auth': read(os.path.join(os.environ['CODEX_HOME'], 'auth.json')),
+    'proc': read('/proc/1/cmdline'),
+}}
+Path('capture.json').write_text(json.dumps(capture), encoding='utf-8')
+json.dump({{'result': 'done'}}, open(args[args.index('--output-last-message') + 1], 'w'))
+"""
+    _fake_codex(worktree, body)
+    monkeypatch.setenv("PATH", f"{worktree}:{os.environ['PATH']}")
+    monkeypatch.setenv("CODEX_HOME", str(home))
+    monkeypatch.setenv("MULTIPL_BEARER", "real-bearer")
     monkeypatch.setenv("UNRELATED_SECRET", "must-not-leak")
-    runner = AgentRunner(tmp_path / "state", 5)
-    outcome = runner.run(
+    state = tmp_path / "state"
+    policy = TaskPolicy(IDENTITY, "gpt-5.6-codex", "high", worktree)
+    outcome = AgentRunner(state, 5).run(
         _attempt(),
         Work("work-1", IDENTITY, {"document": "hello"}),
-        _config(tmp_path).tasks[0],
+        policy,
         SCHEMA,
         lambda attempt: attempt,
     )
-    capture = json.loads((tmp_path / "capture.json").read_text(encoding="utf-8"))
-    schema_path = tmp_path / "state" / "artifacts" / "output-schema.json"
-    output_path = tmp_path / "state" / "artifacts" / "output-last-message.json"
-    assert capture["args"] == [
-        "exec",
-        "--ephemeral",
-        "--ignore-user-config",
-        "--sandbox",
-        "workspace-write",
-        "-C",
-        str(tmp_path),
-        "--output-schema",
-        str(schema_path),
-        "--output-last-message",
-        str(output_path),
-        "--model",
-        "gpt-5.6-codex",
-        "--config",
-        'model_reasoning_effort="high"',
-        "-",
-    ]
-    assert capture["cwd"] == str(tmp_path)
+    capture = json.loads((worktree / "capture.json").read_text(encoding="utf-8"))
+    assert outcome.outcome == "success"
+    assert outcome.payload == {"result": "done"}
+    assert capture["cwd"] == "/workspace"
     assert capture["schema"] == SCHEMA
     assert '"document":"hello"' in capture["stdin"]
-    assert '"registryId":"registry.id"' in capture["stdin"]
+    assert capture["config"] is None
+    assert capture["state"] is None
+    assert capture["unrelated"] is None
+    assert capture["auth"] == '{"token":"auth-token"}'
+    assert "real-bearer" not in capture["proc"]
     assert all(not key.startswith("MULTIPL_") for key in capture["env"])
     assert "UNRELATED_SECRET" not in capture["env"]
-    assert outcome.payload == {"result": "done"}
-    assert stat.S_IMODE(schema_path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(output_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(state.stat().st_mode) == 0o700
+    exchange_output = next((state / "exchange").glob("*/output-last-message.json"))
+    assert stat.S_IMODE(exchange_output.stat().st_mode) == 0o600
+    assert not (state / "process.json").exists()
 
 
 def test_lease_loss_terminates_agent_process_group(monkeypatch, tmp_path: Path) -> None:
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
     _fake_codex(
-        tmp_path,
-        """import os, signal, time
-def stop(_signal, _frame):
-    open('terminated', 'w').write('yes')
-    raise SystemExit(42)
-signal.signal(signal.SIGTERM, stop)
-time.sleep(10)
+        worktree,
+        """import time
+from pathlib import Path
+while True:
+    Path('alive').write_text(str(time.time()))
+    time.sleep(0.05)
 """,
     )
-    monkeypatch.setenv("PATH", f"{tmp_path}:{os.environ['PATH']}")
+    monkeypatch.setenv("PATH", f"{worktree}:{os.environ['PATH']}")
     runner = AgentRunner(tmp_path / "state", 0.25)
 
     renewals = 0
@@ -311,16 +536,91 @@ time.sleep(10)
     outcome = runner.run(
         _attempt(),
         Work("work-1", IDENTITY, {}),
-        _config(tmp_path).tasks[0],
+        TaskPolicy(IDENTITY, "gpt-5.6-codex", "high", worktree),
         SCHEMA,
         lose_lease,
     )
-    assert (tmp_path / "terminated").read_text(encoding="utf-8") == "yes"
+    alive = worktree / "alive"
+    assert alive.exists()
+    timestamp = alive.stat().st_mtime_ns
+    time.sleep(0.2)
+    assert alive.stat().st_mtime_ns == timestamp
     assert renewals == 1
-    assert outcome.outcome == "failure"
-    assert outcome.payload == {
-        "dispatcher": {"status": "failure", "code": "lease_lost", "retryAgent": False}
-    }
+    assert outcome.outcome == "failed"
+    assert outcome.code == "lease_lost"
+
+
+def test_agent_does_not_launch_when_lease_is_too_close(monkeypatch, tmp_path: Path) -> None:
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    _fake_codex(worktree, "raise SystemExit('must not launch')\n")
+    monkeypatch.setenv("PATH", f"{worktree}:{os.environ['PATH']}")
+    expires = (datetime.now(timezone.utc) + timedelta(milliseconds=100)).isoformat()
+    outcome = AgentRunner(tmp_path / "state", 1).run(
+        _attempt(expires_at=expires),
+        Work("work-1", IDENTITY, {}),
+        TaskPolicy(IDENTITY, "gpt-5.6-codex", "high", worktree),
+        SCHEMA,
+        lambda attempt: attempt,
+    )
+    assert outcome.outcome == "failed"
+    assert outcome.code == "lease_too_close"
+    assert not (worktree / "capture.json").exists()
+
+
+@pytest.mark.parametrize("parent_signal", [signal.SIGTERM, signal.SIGKILL])
+def test_dispatcher_parent_death_does_not_leave_fake_agent_orphan(
+    tmp_path: Path,
+    parent_signal: signal.Signals,
+) -> None:
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    marker = worktree / "alive"
+    _fake_codex(
+        worktree,
+        """import time
+from pathlib import Path
+while True:
+    Path('alive').write_text(str(time.time()))
+    time.sleep(0.05)
+""",
+    )
+    state = tmp_path / "state"
+    source_root = Path(__file__).resolve().parents[1] / "src"
+    driver = f"""from pathlib import Path
+from multipl_cli.private_dispatch.agent import AgentRunner
+from multipl_cli.private_dispatch.types import Attempt, Lease, TaskIdentity, TaskPolicy, Work
+identity = TaskIdentity('registry.id', 'document.index', 1)
+worktree = Path({str(worktree)!r})
+runner = AgentRunner(Path({str(state)!r}), 30)
+runner.run(
+    Attempt('attempt-1', 'work-1', Lease('lease-1', 1, '2030-01-01T00:00:00Z')),
+    Work('work-1', identity, {{}}),
+    TaskPolicy(identity, 'gpt-5.6-codex', 'high', worktree),
+    {{'type': 'object'}},
+    lambda attempt: attempt,
+)
+"""
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = str(source_root)
+    environment["PATH"] = f"{worktree}:{environment['PATH']}"
+    driver_process = subprocess.Popen([sys.executable, "-c", driver], env=environment)
+    try:
+        for _ in range(100):
+            if marker.exists():
+                break
+            time.sleep(0.05)
+        assert marker.exists()
+        driver_process.send_signal(parent_signal)
+        driver_process.wait(timeout=10)
+        time.sleep(0.2)
+        timestamp = marker.stat().st_mtime_ns
+        time.sleep(0.2)
+        assert marker.stat().st_mtime_ns == timestamp
+    finally:
+        if driver_process.poll() is None:
+            driver_process.kill()
+            driver_process.wait()
 
 
 def test_child_environment_has_explicit_allowlist() -> None:

@@ -3,6 +3,27 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+TERMINAL_CODES = frozenset(
+    {
+        "agent_failed",
+        "agent_runner_error",
+        "agent_stdin_unavailable",
+        "dispatcher_interrupted",
+        "invalid_agent_output",
+        "isolation_failed",
+        "isolation_unavailable",
+        "lease_expired",
+        "lease_lost",
+        "lease_too_close",
+        "process_record_failed",
+        "restart_after_claim",
+        "restart_after_launch",
+        "renew_ambiguous",
+        "work_not_allowlisted",
+        "work_unavailable",
+    }
+)
+
 
 @dataclass(frozen=True)
 class TaskIdentity:
@@ -72,8 +93,31 @@ class TaskContract:
 
 
 @dataclass(frozen=True)
+class ProcessIdentity:
+    pid: int
+    pgid: int
+    start_time: int
+    command_hash: str
+
+    def to_journal(self) -> dict[str, object]:
+        return {
+            "pid": self.pid,
+            "pgid": self.pgid,
+            "startTime": self.start_time,
+            "commandHash": self.command_hash,
+        }
+
+
+@dataclass(frozen=True)
 class PendingResult:
     attempt: Attempt
     payload: object
     idempotency_key: str
+
+
+@dataclass(frozen=True)
+class PendingOutcome:
+    attempt: Attempt
     outcome: str
+    code: str
+    idempotency_key: str
