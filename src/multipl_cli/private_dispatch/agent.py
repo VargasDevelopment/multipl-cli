@@ -43,6 +43,12 @@ class RenewalUnresolved(RuntimeError):
     pass
 
 
+class RenewalLeaseLost(RuntimeError):
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(f"Renewal resolved without an active lease: {code}")
+
+
 class AgentInterrupted(RuntimeError):
     pass
 
@@ -536,6 +542,13 @@ class AgentRunner:
                 "unknown",
                 "dispatcher_interrupted",
                 True,
+            )
+        except RenewalLeaseLost as exc:
+            return AgentOutcome(
+                current,
+                failure_payload(exc.code),
+                "unknown",
+                exc.code,
             )
         except RenewalUnresolved:
             return AgentOutcome(

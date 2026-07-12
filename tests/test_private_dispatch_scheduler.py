@@ -15,11 +15,21 @@ import pytest
 from multipl_cli.private_dispatch.agent import (
     AgentOutcome,
     AgentRunner,
+    RenewalLeaseLost,
     RenewalUnresolved,
     child_environment,
     process_identity,
 )
 from multipl_cli.private_dispatch.client import PrivateApiError
+from multipl_cli.private_dispatch.journal_state import (
+    AcquireIntent,
+    AcquireResponse,
+    Claimed,
+    Launched,
+    OutcomePending,
+    OutcomeRejected,
+    RenewIntent,
+)
 from multipl_cli.private_dispatch.lease import LeaseExpired
 from multipl_cli.private_dispatch.scheduler import Dispatcher
 from multipl_cli.private_dispatch.storage import Journal, acquire_lock
@@ -73,12 +83,14 @@ class FakeClient:
         outcome_failures: int = 0,
         acquire_error: PrivateApiError | None = None,
         renew_errors: list[PrivateApiError] | None = None,
+        outcome_errors: list[PrivateApiError] | None = None,
     ) -> None:
         self.next_attempt = attempt
         self.submit_failures = submit_failures
         self.outcome_failures = outcome_failures
         self.acquire_error = acquire_error
         self.renew_errors = list(renew_errors or [])
+        self.outcome_errors = list(outcome_errors or [])
         self.acquires: list[tuple[tuple[TaskIdentity, ...], str]] = []
         self.submissions: list[tuple[Attempt, object, str]] = []
         self.outcomes: list[tuple[Attempt, str, str, str]] = []
@@ -113,6 +125,8 @@ class FakeClient:
 
     def outcome(self, attempt: Attempt, outcome: str, code: str, key: str) -> None:
         self.outcomes.append((attempt, outcome, code, key))
+        if self.outcome_errors:
+            raise self.outcome_errors.pop(0)
         if self.outcome_failures:
             self.outcome_failures -= 1
             raise PrivateApiError("submit outcome", 503, ambiguous=True)
@@ -136,6 +150,8 @@ class FakeRunner:
                 current = renew(current)
             except RenewalUnresolved:
                 return AgentOutcome(current, None, "failed", "renew_ambiguous", True)
+            except RenewalLeaseLost as error:
+                return AgentOutcome(current, None, "unknown", error.code)
             except LeaseExpired:
                 return AgentOutcome(current, None, "failed", "lease_expired")
             except PrivateApiError:
@@ -202,10 +218,9 @@ def test_acquire_intent_replays_exact_allowlist_and_key_after_ambiguous_failure(
     first = Dispatcher(config, first_client, FakeRunner()).dispatch_once()
     assert first.code == 2
     intent = Journal(config.state_dir).load()
-    assert intent is not None
-    assert intent["state"] == "acquire_intent"
-    assert intent["allowlist"] == [IDENTITY.to_api()]
-    key = intent["idempotencyKey"]
+    assert isinstance(intent, AcquireIntent)
+    assert intent.allowlist == (IDENTITY,)
+    key = intent.idempotency_key
 
     second_client = FakeClient(_attempt())
     second = Dispatcher(config, second_client, FakeRunner()).dispatch_once()
@@ -217,22 +232,7 @@ def test_acquire_intent_replays_exact_allowlist_and_key_after_ambiguous_failure(
 def test_acquire_response_is_replayed_without_a_second_acquire(tmp_path: Path) -> None:
     config = _config(tmp_path)
     attempt = _attempt()
-    Journal(config.state_dir).write(
-        {
-            "state": "acquire_response",
-            "allowlist": [IDENTITY.to_api()],
-            "idempotencyKey": "stable-acquire-key",
-            "attempt": {
-                "attemptId": attempt.attempt_id,
-                "workId": attempt.work_id,
-                "lease": {
-                    "leaseId": attempt.lease.lease_id,
-                    "generation": 1,
-                    "expiresAt": attempt.lease.expires_at,
-                },
-            },
-        }
-    )
+    Journal(config.state_dir).write(AcquireResponse((IDENTITY,), "stable-acquire-key", attempt))
     client = FakeClient()
     result = Dispatcher(config, client, FakeRunner()).dispatch_once()
     assert result.code == 0
@@ -276,7 +276,7 @@ def test_terminal_outcome_spool_blocks_acquire_until_retried(tmp_path: Path) -> 
     first_client = FakeClient(_attempt(), outcome_failures=1)
     first = Dispatcher(config, first_client, FakeRunner(result="failed")).dispatch_once()
     assert first.code == 2
-    assert Journal(config.state_dir).load()["state"] == "outcome_pending"
+    assert isinstance(Journal(config.state_dir).load(), OutcomePending)
 
     second_client = FakeClient()
     second = Dispatcher(config, second_client, FakeRunner()).dispatch_once()
@@ -288,7 +288,9 @@ def test_terminal_outcome_spool_blocks_acquire_until_retried(tmp_path: Path) -> 
 def test_renewal_is_journaled_and_timeout_is_bounded_by_remaining_lease(tmp_path: Path) -> None:
     expires = (datetime.now(timezone.utc) + timedelta(seconds=2)).isoformat()
     client = FakeClient(_attempt(expires_at=expires))
-    result = Dispatcher(_config(tmp_path, heartbeat=30), client, FakeRunner(call_renew=True)).dispatch_once()
+    result = Dispatcher(
+        _config(tmp_path, heartbeat=30), client, FakeRunner(call_renew=True)
+    ).dispatch_once()
     assert result.code == 0
     assert len(client.renews) == 1
     assert 0 < client.renews[0][2] <= 2
@@ -303,8 +305,9 @@ def test_ambiguous_renew_retries_exact_request_and_defers_terminal_state(tmp_pat
     first = Dispatcher(config, first_client, FakeRunner(call_renew=True)).dispatch_once()
     assert first.code == 2
     intent = Journal(config.state_dir).load()
-    assert intent["state"] == "renew_intent"
-    assert intent["terminal"] == {"outcome": "failed", "code": "renew_ambiguous"}
+    assert isinstance(intent, RenewIntent)
+    assert intent.terminal is not None
+    assert (intent.terminal.outcome, intent.terminal.code) == ("failed", "renew_ambiguous")
     assert first_client.renews[0][0] == first_client.renews[1][0]
     assert first_client.renews[0][1] == first_client.renews[1][1]
 
@@ -317,28 +320,89 @@ def test_ambiguous_renew_retries_exact_request_and_defers_terminal_state(tmp_pat
     assert second_client.outcomes[0][1:3] == ("failed", "renew_ambiguous")
 
 
+def test_exact_renew_replay_not_found_kills_child_and_submits_unknown_with_original_lease(
+    tmp_path: Path,
+) -> None:
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        start_new_session=True,
+    )
+    try:
+        time.sleep(0.05)
+        identity = process_identity(process)
+        config = _config(tmp_path)
+        attempt = _attempt(
+            expires_at=(datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat()
+        )
+        Journal(config.state_dir).write(
+            RenewIntent(attempt, IDENTITY.key, "stable-renew-key", identity)
+        )
+        client = FakeClient(renew_errors=[PrivateApiError("renew", 404)])
+
+        result = Dispatcher(config, client, FakeRunner()).dispatch_once()
+
+        assert result.code == 0
+        for _ in range(50):
+            if process.poll() is not None:
+                break
+            time.sleep(0.02)
+        assert process.poll() is not None
+        assert client.outcomes[0][:3] == (attempt, "unknown", "lease_lost")
+        assert client.outcomes[0][0].lease.generation == 1
+        assert client.renews == [(attempt, "stable-renew-key", pytest.approx(30, abs=1))]
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+
+
+def test_in_process_renew_replay_not_found_becomes_unknown_with_original_lease(
+    tmp_path: Path,
+) -> None:
+    attempt = _attempt()
+    client = FakeClient(
+        attempt,
+        renew_errors=[
+            PrivateApiError("renew", 503, ambiguous=True),
+            PrivateApiError("renew", 404),
+        ],
+    )
+
+    result = Dispatcher(_config(tmp_path), client, FakeRunner(call_renew=True)).dispatch_once()
+
+    assert result.code == 2
+    assert client.outcomes[0][:3] == (attempt, "unknown", "lease_lost")
+    assert client.outcomes[0][0].lease.generation == 1
+    assert client.renews[0][:2] == client.renews[1][:2]
+
+
+def test_definitive_outcome_rejection_is_durable_and_does_not_loop(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    first_client = FakeClient(
+        _attempt(),
+        outcome_errors=[PrivateApiError("submit outcome", 404)],
+    )
+    first = Dispatcher(config, first_client, FakeRunner(result="failed")).dispatch_once()
+
+    assert first.code == 2
+    rejected = Journal(config.state_dir).load()
+    assert isinstance(rejected, OutcomeRejected)
+    assert rejected.status_code == 404
+
+    second_client = FakeClient()
+    second = Dispatcher(config, second_client, FakeRunner()).dispatch_once()
+
+    assert second.code == 2
+    assert "operator reconciliation" in second.message
+    assert second_client.outcomes == []
+    assert second_client.acquires == []
+
+
 def test_restart_during_renew_replays_exact_lease_before_unknown_outcome(tmp_path: Path) -> None:
     config = _config(tmp_path)
     attempt = _attempt()
     key = "stable-renew-key"
-    raw_attempt = {
-        "attemptId": attempt.attempt_id,
-        "workId": attempt.work_id,
-        "lease": {
-            "leaseId": attempt.lease.lease_id,
-            "generation": 1,
-            "expiresAt": attempt.lease.expires_at,
-        },
-    }
-    Journal(config.state_dir).write(
-        {
-            "state": "renew_intent",
-            "taskKey": IDENTITY.key,
-            "attempt": raw_attempt,
-            "renewIntent": {"attempt": raw_attempt, "idempotencyKey": key},
-            "process": None,
-        }
-    )
+    Journal(config.state_dir).write(RenewIntent(attempt, IDENTITY.key, key))
     client = FakeClient()
     result = Dispatcher(config, client, FakeRunner()).dispatch_once()
     assert result.code == 0
@@ -351,21 +415,7 @@ def test_restart_during_renew_replays_exact_lease_before_unknown_outcome(tmp_pat
 def test_restart_after_launch_submits_unknown_outcome_and_never_relaunches(tmp_path: Path) -> None:
     config = _config(tmp_path)
     journal = Journal(config.state_dir)
-    journal.write(
-        {
-            "state": "launched",
-            "attempt": {
-                "attemptId": "attempt-1",
-                "workId": "work-1",
-                "lease": {
-                    "leaseId": _attempt().lease.lease_id,
-                    "generation": 1,
-                    "expiresAt": _attempt().lease.expires_at,
-                },
-            },
-            "taskKey": IDENTITY.key,
-        }
-    )
+    journal.write(Launched(_attempt(), IDENTITY.key))
     client = FakeClient()
     runner = FakeRunner()
     result = Dispatcher(config, client, runner).dispatch_once()
@@ -381,27 +431,17 @@ def test_restart_after_launch_terminates_matching_recorded_process_group(tmp_pat
         start_new_session=True,
     )
     try:
+        time.sleep(0.05)
         identity = process_identity(process)
         config = _config(tmp_path)
         attempt = _attempt()
-        Journal(config.state_dir).write(
-            {
-                "state": "launched",
-                "attempt": {
-                    "attemptId": attempt.attempt_id,
-                    "workId": attempt.work_id,
-                    "lease": {
-                        "leaseId": attempt.lease.lease_id,
-                        "generation": 1,
-                        "expiresAt": attempt.lease.expires_at,
-                    },
-                },
-                "taskKey": IDENTITY.key,
-                "process": identity.to_journal(),
-            }
-        )
+        Journal(config.state_dir).write(Launched(attempt, IDENTITY.key, identity))
         result = Dispatcher(config, FakeClient(), FakeRunner()).dispatch_once()
         assert result.code == 0
+        for _ in range(50):
+            if process.poll() is not None:
+                break
+            time.sleep(0.02)
         assert process.poll() is not None
     finally:
         if process.poll() is None:
@@ -411,20 +451,7 @@ def test_restart_after_launch_terminates_matching_recorded_process_group(tmp_pat
 
 def test_restart_after_claim_submits_failed_outcome_without_launch(tmp_path: Path) -> None:
     config = _config(tmp_path)
-    Journal(config.state_dir).write(
-        {
-            "state": "claimed",
-            "attempt": {
-                "attemptId": "attempt-1",
-                "workId": "work-1",
-                "lease": {
-                    "leaseId": _attempt().lease.lease_id,
-                    "generation": 1,
-                    "expiresAt": _attempt().lease.expires_at,
-                },
-            },
-        }
-    )
+    Journal(config.state_dir).write(Claimed(_attempt()))
     client = FakeClient()
     runner = FakeRunner()
     result = Dispatcher(config, client, runner).dispatch_once()

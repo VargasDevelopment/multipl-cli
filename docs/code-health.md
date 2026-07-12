@@ -16,6 +16,10 @@ oversized files are also ratcheted individually: an existing giant may shrink bu
 and a new file over its category ceiling fails immediately. Production files are capped at 700
 lines and tests at 1000 lines.
 
+The dispatcher reducer, journal codec, and scheduler also have explicit protected ceilings in
+`pyproject.toml`; those ceilings ratchet their architecture without adding currently-small files
+to the oversized-file debt baseline.
+
 The generated OpenAPI client at `src/multipl_cli/_client` is intentionally excluded from
 production-debt metrics because it is regenerated from the API schema. Its file count remains
 visible in command output so the exclusion is explicit.

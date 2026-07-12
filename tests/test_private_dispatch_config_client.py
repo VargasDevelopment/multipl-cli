@@ -13,6 +13,7 @@ from multipl_cli import main
 from multipl_cli.private_dispatch import config as config_module
 from multipl_cli.private_dispatch.client import PrivateApiError, PrivateClient
 from multipl_cli.private_dispatch.config import DispatchConfigError, load_dispatch_config
+from multipl_cli.private_dispatch.journal_state import Claimed
 from multipl_cli.private_dispatch.storage import Journal, atomic_write
 from multipl_cli.private_dispatch.types import Attempt, Lease
 
@@ -268,8 +269,9 @@ def test_atomic_storage_enforces_secret_modes(tmp_path: Path) -> None:
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
     journal = Journal(state)
-    journal.write({"state": "claimed"})
-    assert journal.load() == {"state": "claimed"}
+    attempt = Attempt("attempt-1", "work-1", Lease("lease-1", 1, "2030-01-01T00:00:00Z"))
+    journal.write(Claimed(attempt))
+    assert journal.load() == Claimed(attempt)
     assert stat.S_IMODE(journal.path.stat().st_mode) == 0o600
 
 

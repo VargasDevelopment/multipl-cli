@@ -8,6 +8,12 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from multipl_cli.private_dispatch.journal_state import (
+    JournalState,
+    parse_state,
+    serialize_state,
+)
+
 
 class DispatchLockHeld(RuntimeError):
     pass
@@ -80,16 +86,13 @@ class Journal:
     def __init__(self, state_dir: Path) -> None:
         self.path = state_dir / "journal.json"
 
-    def load(self) -> dict[str, object] | None:
+    def load(self) -> JournalState | None:
         if not self.path.exists():
             return None
-        value = json.loads(self.path.read_text(encoding="utf-8"))
-        if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
-            raise ValueError("Dispatcher journal is invalid")
-        return value
+        return parse_state(self.path.read_bytes())
 
-    def write(self, payload: dict[str, object]) -> None:
-        atomic_json(self.path, payload)
+    def write(self, state: JournalState) -> None:
+        atomic_write(self.path, serialize_state(state))
 
     def clear(self) -> None:
         try:

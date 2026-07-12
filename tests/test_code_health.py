@@ -22,6 +22,7 @@ def _config() -> code_health.HealthConfig:
         production_line_limit=3,
         test_line_limit=4,
         sanctioned_cli_boundaries=frozenset({"src/multipl_cli/main.py"}),
+        protected_line_limits=(("src/multipl_cli/private_dispatch/scheduler.py", 520),),
     )
 
 
@@ -131,6 +132,26 @@ def test_oversized_file_ratchet_rejects_growth_and_new_giants() -> None:
 
     assert "production oversized src/old.py: 702 (baseline 701)" in grown_regressions
     assert "production oversized src/new.py: new oversized file (701 lines)" in new_regressions
+
+
+def test_protected_dispatcher_line_ceiling_rejects_growth_without_baseline_debt(
+    tmp_path: Path,
+) -> None:
+    _write(tmp_path, "src/multipl_cli/private_dispatch/scheduler.py", "line = 1\n" * 4)
+    config = code_health.HealthConfig(
+        production_roots=("src",),
+        test_root="tests",
+        generated_client="src/generated",
+        baseline="baseline.json",
+        production_line_limit=700,
+        test_line_limit=1000,
+        sanctioned_cli_boundaries=frozenset(),
+        protected_line_limits=(("src/multipl_cli/private_dispatch/scheduler.py", 3),),
+    )
+
+    assert code_health.protected_line_regressions(tmp_path, config) == [
+        "protected line ceiling src/multipl_cli/private_dispatch/scheduler.py: 4 (limit 3)"
+    ]
 
 
 def test_repository_scan_includes_untracked_nonignored_files(tmp_path: Path) -> None:

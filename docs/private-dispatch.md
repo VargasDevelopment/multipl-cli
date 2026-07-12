@@ -99,8 +99,14 @@ Idempotency-Key: <stable-key>
 `outcome` is `failed` for invalid output, nonzero exit, lease loss, isolation failure, and other
 bounded dispatcher failures. `outcome` is `unknown` when the scheduler cannot know what happened,
 including restart after launch. Terminal records are retried before any acquire and are never
-converted into runnable producer results. A rejected or unavailable terminal submission remains
-spooled and blocks new work.
+converted into runnable producer results. Ambiguous terminal submission failures remain
+`outcome_pending` and block new work; a definitive rejection is recorded as a fail-closed
+`outcome_rejected` state with an actionable operator message instead of being retried forever.
+
+If an exact renewal replay returns a definitive expired/not-found response after an outage, the
+dispatcher terminates the recorded child, records `unknown`, and submits that outcome with the
+original lease. The server may accept that elapsed lease only when the exact attempt is still
+active; otherwise the durable `outcome_rejected` state prevents blind replay.
 
 Successful output alone uses:
 

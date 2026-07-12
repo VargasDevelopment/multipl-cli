@@ -35,6 +35,7 @@ class HealthConfig:
     production_line_limit: int
     test_line_limit: int
     sanctioned_cli_boundaries: frozenset[str]
+    protected_line_limits: tuple[tuple[str, int], ...] = ()
 
 
 def load_config(root: Path) -> HealthConfig:
@@ -48,6 +49,12 @@ def load_config(root: Path) -> HealthConfig:
         production_line_limit=tool_config.get("production_line_limit", 700),
         test_line_limit=tool_config.get("test_line_limit", 1000),
         sanctioned_cli_boundaries=frozenset(tool_config.get("sanctioned_cli_boundaries", [])),
+        protected_line_limits=tuple(
+            sorted(
+                (str(path), int(limit))
+                for path, limit in tool_config.get("protected_line_limits", {}).items()
+            )
+        ),
     )
 
 
@@ -251,6 +258,18 @@ def oversized_files(root: Path, paths: list[Path], limit: int) -> dict[str, int]
     }
 
 
+def protected_line_regressions(root: Path, config: HealthConfig) -> list[str]:
+    regressions = []
+    for name, limit in config.protected_line_limits:
+        path = root / name
+        if not path.is_file():
+            continue
+        lines = len(path.read_text(encoding="utf-8").splitlines())
+        if lines > limit:
+            regressions.append(f"protected line ceiling {name}: {lines} (limit {limit})")
+    return regressions
+
+
 def collect_snapshot(root: Path, config: HealthConfig) -> tuple[dict[str, object], dict[str, list[str]]]:
     all_files, production, tests, generated = source_groups(root, config)
     metric_names = [
@@ -380,9 +399,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     messages, regressions = compare(snapshot, baseline)
+    protected_regressions = protected_line_regressions(root, config)
+    regressions.extend(protected_regressions)
     print(f"Generated client excluded from production debt: {config.generated_client} ({len(details['generated_client_files'])} files)")
     for message in messages:
         print(message)
+    for regression in protected_regressions:
+        print(f"REGRESSED  {regression}")
     for name in ("broken_relative_markdown_links", "duplicate_command_modules"):
         for item in details[name]:
             print(f"DETAIL    {name}: {item}")
