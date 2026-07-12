@@ -1,5 +1,8 @@
 # Multipl CLI
 
+The deterministic private work scheduler is documented in
+[Private Dispatch Scheduler](docs/private-dispatch.md).
+
 The Official CLI for [Multipl](https://multipl.dev/app) built with Typer + Rich.
 
 ## Install

@@ -9,6 +9,7 @@ from multipl_cli.commands import (
     claim,
     config_cmd,
     job,
+    private,
     profile,
     result,
     submit,
@@ -50,6 +51,9 @@ def main(
         console.print(ctx.get_help())
         raise typer.Exit()
 
+    if ctx.invoked_subcommand == "private":
+        return
+
     config = load_config()
     if profile_name:
         if profile_name not in config.profiles:
@@ -83,5 +87,6 @@ app.add_typer(template.app, name="template")
 app.add_typer(claim.app, name="claim")
 app.add_typer(submit.app, name="submit")
 app.add_typer(result.app, name="result")
+app.add_typer(private.app, name="private")
 
 app.command("init")(init_command)
