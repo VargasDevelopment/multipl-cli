@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Literal, TypeAlias
 
 from multipl_cli.private_dispatch.types import (
@@ -74,6 +75,9 @@ class ResultPending:
     payload: object
     idempotency_key: str
     state: Literal["result_pending"] = field(default="result_pending", init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "payload", _json_value(self.payload))
 
 
 @dataclass(frozen=True)
@@ -168,11 +172,7 @@ def _allowlist(value: object) -> tuple[TaskIdentity, ...]:
 
 
 def _lease(value: object) -> Lease:
-    data = _object(
-        value,
-        "journal lease",
-        frozenset({"leaseId", "generation", "expiresAt"}),
-    )
+    data = _object(value, "journal lease", frozenset({"leaseId", "generation", "expiresAt"}))
     return Lease(
         _text(data["leaseId"], "journal leaseId"),
         _positive_int(data["generation"], "journal lease generation"),
@@ -230,22 +230,27 @@ def _terminal(value: object) -> TerminalDirective | None:
     return TerminalDirective(outcome, code)
 
 
-def _json_value(value: object, label: str = "journal payload") -> object:
+def _json_value(value: object, label: str = "journal payload", *, mutable: bool = False) -> object:
     if value is None or isinstance(value, (str, bool, int)):
         return value
     if isinstance(value, float):
         if not math.isfinite(value):
             raise JournalCodecError(f"{label} contains a non-finite number")
         return value
-    if isinstance(value, list):
-        for item in value:
-            _json_value(item, label)
-        return value
-    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
-        for item in value.values():
-            _json_value(item, label)
-        return value
+    if isinstance(value, list) or (mutable and isinstance(value, tuple)):
+        items = [_json_value(item, label, mutable=mutable) for item in value]
+        return items if mutable else tuple(items)
+    if (
+        (isinstance(value, dict) or (mutable and isinstance(value, Mapping)))
+        and all(isinstance(key, str) for key in value)
+    ):
+        items = {key: _json_value(item, label, mutable=mutable) for key, item in value.items()}
+        return items if mutable else MappingProxyType(items)
     raise JournalCodecError(f"{label} is not JSON-compatible")
+
+
+def json_for_submission(value: object) -> object:
+    return _json_value(value, mutable=True)
 
 
 def _terminal_fields(value: dict[str, object], label: str) -> tuple[TerminalOutcome, str]:
@@ -332,7 +337,7 @@ def _decode_result_pending(data: dict[str, object]) -> JournalState:
     )
     return ResultPending(
         _attempt(value["attempt"]),
-        _json_value(value["payload"]),
+        value["payload"],
         _text(value["idempotencyKey"], "idempotencyKey"),
     )
 
@@ -455,7 +460,7 @@ def _encode_state(state: JournalState) -> dict[str, object]:
         return {
             "state": state.state,
             "attempt": _encode_attempt(state.attempt),
-            "payload": state.payload,
+            "payload": json_for_submission(state.payload),
             "idempotencyKey": state.idempotency_key,
         }
     if isinstance(state, OutcomePending):

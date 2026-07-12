@@ -74,10 +74,11 @@ The pass proceeds in this order:
 7. Persist the terminal operation before sending it. Successful agent output is submitted as a
    result; failures and unknowns use the terminal outcome endpoint below.
 
-Lease expiry timestamps are parsed as authoritative UTC times. The first and later renewals use a
-safety margin based on remaining authority; `heartbeatSeconds` is only a maximum cadence. The
-renew HTTP timeout is no longer than the remaining lease. The dispatcher does not launch when the
-lease is expired or too close to expiry.
+Lease expiry timestamps are parsed as authoritative UTC times. The first and later live renewals
+use a safety margin based on remaining authority; `heartbeatSeconds` is only a maximum cadence,
+and their HTTP timeout is no longer than the remaining lease. Recovery of a journaled renewal
+replays the exact idempotent request with a finite bounded timeout even if that local lease has
+expired. The dispatcher does not launch when the lease is expired or too close to expiry.
 
 ## Terminal Outcomes
 

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 MINIMUM_SAFETY_MARGIN = 0.5
 MAXIMUM_SAFETY_MARGIN = 5.0
+RENEW_REPLAY_TIMEOUT_SECONDS = 5.0
 
 
 class LeaseExpired(RuntimeError):

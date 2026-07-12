@@ -18,12 +18,14 @@ from multipl_cli.private_dispatch.journal_state import (
     TerminalDirective,
     decode_state,
     encode_state,
+    json_for_submission,
     parse_state,
     serialize_state,
 )
 from multipl_cli.private_dispatch.state_machine import (
     LEGAL_TRANSITIONS,
     IllegalJournalTransition,
+    JournalStateMachine,
     dispatch_recovery,
     transition_allowed,
     validate_transition,
@@ -70,6 +72,48 @@ def test_every_journal_variant_rejects_unknown_fields(state: object) -> None:
 
     with pytest.raises(JournalCodecError):
         decode_state(encoded)
+
+
+@pytest.mark.parametrize("state", _states(), ids=lambda state: state.state)
+def test_encode_output_is_detached_for_every_journal_variant(state: object) -> None:
+    expected = encode_state(state)
+    encoded = encode_state(state)
+    encoded["state"] = "mutated"
+    if "allowlist" in encoded:
+        encoded["allowlist"][0]["version"] = 99
+    else:
+        encoded["attempt"]["lease"]["generation"] = 99
+
+    assert encode_state(state) == expected
+
+
+def test_result_payload_is_deeply_immutable_across_boundaries() -> None:
+    source = {"nested": {"rows": [{"values": [1, {"ok": True}]}]}}
+    expected = {"nested": {"rows": [{"values": [1, {"ok": True}]}]}}
+    state = ResultPending(ATTEMPT, source, "result-key")
+    source["nested"]["rows"][0]["values"][1]["ok"] = False
+    source["nested"]["rows"].append({"values": []})
+
+    encoded = encode_state(state)
+    decoded = decode_state(encoded)
+    encoded["payload"]["nested"]["rows"][0]["values"].append("encoded")
+    submission = json_for_submission(decoded.payload)
+    submission["nested"]["rows"][0]["values"].append("submitted")
+
+    assert encode_state(state)["payload"] == expected
+    assert encode_state(decoded)["payload"] == expected
+
+
+def test_queue_result_freezes_payload_owned_by_reducer(tmp_path: Path) -> None:
+    journal = Journal(tmp_path / "state")
+    launched = Launched(ATTEMPT, IDENTITY.key)
+    journal.write(launched)
+    machine = JournalStateMachine(journal)
+    source = {"nested": [{"items": [1, 2]}]}
+    pending = machine.queue_result(launched, source, "result-key")
+    source["nested"][0]["items"].append(3)
+
+    assert encode_state(pending)["payload"] == {"nested": [{"items": [1, 2]}]}
 
 
 def test_codec_rejects_missing_fields_wrong_types_and_non_finite_numbers() -> None:

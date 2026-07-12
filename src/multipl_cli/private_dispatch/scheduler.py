@@ -25,8 +25,13 @@ from multipl_cli.private_dispatch.journal_state import (
     ResultPending,
     TerminalDirective,
     TerminalOutcome,
+    json_for_submission,
 )
-from multipl_cli.private_dispatch.lease import LeaseExpired, renewal_timeout
+from multipl_cli.private_dispatch.lease import (
+    RENEW_REPLAY_TIMEOUT_SECONDS,
+    LeaseExpired,
+    renewal_timeout,
+)
 from multipl_cli.private_dispatch.state_machine import JournalStateMachine
 from multipl_cli.private_dispatch.storage import DispatchLockHeld, Journal, acquire_lock
 from multipl_cli.private_dispatch.types import (
@@ -141,7 +146,11 @@ class Dispatcher:
 
     def recover_result_pending(self, state: ResultPending) -> DispatchResult | None:
         try:
-            self._client.submit(state.attempt, state.payload, state.idempotency_key)
+            self._client.submit(
+                state.attempt,
+                json_for_submission(state.payload),
+                state.idempotency_key,
+            )
         except PrivateApiError:
             return DispatchResult(2, "Pending private result submission failed; no work acquired.")
         self._machine.complete(state)
@@ -265,12 +274,7 @@ class Dispatcher:
         return renewed
 
     def _renew_remote(self, attempt: Attempt, key: str, timeout: float) -> Attempt:
-        try:
-            return self._client.renew(attempt, key, timeout=timeout)
-        except TypeError as exc:
-            if "timeout" not in str(exc):
-                raise
-            return self._client.renew(attempt, key)
+        return self._client.renew(attempt, key, timeout=timeout)
 
     def _queue_and_flush_result(self, attempt: Attempt, payload: object) -> DispatchResult:
         launched = self._machine.require(Launched)
@@ -288,7 +292,11 @@ class Dispatcher:
             ),
         )
         try:
-            self._client.submit(pending.attempt, pending.payload, pending.idempotency_key)
+            self._client.submit(
+                pending.attempt,
+                json_for_submission(pending.payload),
+                pending.idempotency_key,
+            )
         except PrivateApiError:
             return DispatchResult(2, "Private result submission failed and remains pending.")
         self._machine.complete(pending)
@@ -357,7 +365,7 @@ class Dispatcher:
             renewed = self._renew_remote(
                 state.attempt,
                 state.idempotency_key,
-                renewal_timeout(state.attempt.lease.expires_at),
+                RENEW_REPLAY_TIMEOUT_SECONDS,
             )
         except PrivateApiError as exc:
             if exc.ambiguous:

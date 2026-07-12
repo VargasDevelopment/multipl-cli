@@ -30,7 +30,7 @@ from multipl_cli.private_dispatch.journal_state import (
     OutcomeRejected,
     RenewIntent,
 )
-from multipl_cli.private_dispatch.lease import LeaseExpired
+from multipl_cli.private_dispatch.lease import RENEW_REPLAY_TIMEOUT_SECONDS, LeaseExpired
 from multipl_cli.private_dispatch.scheduler import Dispatcher
 from multipl_cli.private_dispatch.storage import Journal, acquire_lock
 from multipl_cli.private_dispatch.types import (
@@ -349,7 +349,9 @@ def test_exact_renew_replay_not_found_kills_child_and_submits_unknown_with_origi
         assert process.poll() is not None
         assert client.outcomes[0][:3] == (attempt, "unknown", "lease_lost")
         assert client.outcomes[0][0].lease.generation == 1
-        assert client.renews == [(attempt, "stable-renew-key", pytest.approx(30, abs=1))]
+        assert client.renews == [
+            (attempt, "stable-renew-key", pytest.approx(RENEW_REPLAY_TIMEOUT_SECONDS))
+        ]
     finally:
         if process.poll() is None:
             process.kill()
@@ -409,6 +411,23 @@ def test_restart_during_renew_replays_exact_lease_before_unknown_outcome(tmp_pat
     assert client.renews[0][0] == attempt
     assert client.renews[0][1] == key
     assert client.outcomes[0][0].lease.generation == 2
+    assert client.outcomes[0][1:3] == ("unknown", "restart_after_launch")
+
+
+def test_expired_renew_recovery_replays_key_and_uses_committed_generation(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    attempt = _attempt(generation=7, expires_at="2020-01-01T00:00:00Z")
+    key = "renew-committed-before-response-loss"
+    Journal(config.state_dir).write(RenewIntent(attempt, IDENTITY.key, key))
+    client = FakeClient()
+
+    result = Dispatcher(config, client, FakeRunner()).dispatch_once()
+
+    assert result.code == 0
+    assert client.renews == [(attempt, key, RENEW_REPLAY_TIMEOUT_SECONDS)]
+    assert client.outcomes[0][0].lease.generation == 8
     assert client.outcomes[0][1:3] == ("unknown", "restart_after_launch")
 
 
